@@ -7,7 +7,7 @@ describe('detectForge', () => {
     expect(config).toEqual({
       type: 'github',
       baseUrl: 'https://api.github.com',
-      owner: 'bordumb',
+      owner: 'auths-dev',
       repo: 'auths',
     });
   });
@@ -70,7 +70,7 @@ describe('detectForge', () => {
   it('should handle URLs with extra path segments', () => {
     const config = detectForge('https://github.com/auths-dev/auths/tree/main');
     expect(config).not.toBeNull();
-    expect(config!.owner).toBe('bordumb');
+    expect(config!.owner).toBe('auths-dev');
     expect(config!.repo).toBe('auths');
   });
 });
