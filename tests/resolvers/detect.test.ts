@@ -3,7 +3,7 @@ import { detectForge } from '../../src/resolvers/detect';
 
 describe('detectForge', () => {
   it('should detect GitHub repos', () => {
-    const config = detectForge('https://github.com/bordumb/auths');
+    const config = detectForge('https://github.com/auths-dev/auths');
     expect(config).toEqual({
       type: 'github',
       baseUrl: 'https://api.github.com',
@@ -33,13 +33,13 @@ describe('detectForge', () => {
   });
 
   it('should strip .git suffix', () => {
-    const config = detectForge('https://github.com/bordumb/auths.git');
+    const config = detectForge('https://github.com/auths-dev/auths.git');
     expect(config).not.toBeNull();
     expect(config!.repo).toBe('auths');
   });
 
   it('should strip trailing slash', () => {
-    const config = detectForge('https://github.com/bordumb/auths/');
+    const config = detectForge('https://github.com/auths-dev/auths/');
     expect(config).not.toBeNull();
     expect(config!.repo).toBe('auths');
   });
@@ -54,7 +54,7 @@ describe('detectForge', () => {
   });
 
   it('should use forgeHint to override detection', () => {
-    const config = detectForge('https://github.com/bordumb/auths', 'gitea');
+    const config = detectForge('https://github.com/auths-dev/auths', 'gitea');
     expect(config).not.toBeNull();
     expect(config!.type).toBe('gitea');
     expect(config!.baseUrl).toBe('https://github.com');
@@ -68,7 +68,7 @@ describe('detectForge', () => {
   });
 
   it('should handle URLs with extra path segments', () => {
-    const config = detectForge('https://github.com/bordumb/auths/tree/main');
+    const config = detectForge('https://github.com/auths-dev/auths/tree/main');
     expect(config).not.toBeNull();
     expect(config!.owner).toBe('bordumb');
     expect(config!.repo).toBe('auths');

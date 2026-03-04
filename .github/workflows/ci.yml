@@ -16,7 +16,7 @@ jobs:
       - name: Checkout auths repo (for local @auths/verifier dependency)
         uses: actions/checkout@v4
         with:
-          repository: bordumb/auths
+          repository: auths-dev/auths
           path: ../auths
 
       - name: Install Rust

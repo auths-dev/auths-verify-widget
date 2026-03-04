@@ -1,9 +1,9 @@
 # `<auths-verify>` Web Component
 
 [![npm version](https://img.shields.io/npm/v/auths-verify.svg)](https://www.npmjs.com/package/auths-verify)
-[![license](https://img.shields.io/npm/l/auths-verify.svg)](https://github.com/bordumb/auths-verify-widget/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/auths-verify.svg)](https://github.com/auths-dev/auths-verify-widget/blob/main/LICENSE)
 
-A drop-in web component that verifies [Auths](https://github.com/bordumb/auths) decentralized identities — the open-source equivalent of GitHub's green "Verified" badge. Point it at any repository that uses Auths, and it cryptographically verifies the identity chain in the browser via WASM.
+A drop-in web component that verifies [Auths](https://github.com/auths-dev/auths) decentralized identities — the open-source equivalent of GitHub's green "Verified" badge. Point it at any repository that uses Auths, and it cryptographically verifies the identity chain in the browser via WASM.
 
 ## Install
 
@@ -39,7 +39,7 @@ That's it. The widget will:
 4. Cryptographically verify the full attestation chain
 5. Display a badge showing the result (Verified, Invalid, Expired, etc.)
 
-**Prerequisite:** The repository owner must have set up an Auths identity with [`auths init`](https://github.com/bordumb/auths). If the repo doesn't have Auths identity data, the widget will show an error.
+**Prerequisite:** The repository owner must have set up an Auths identity with [`auths init`](https://github.com/auths-dev/auths). If the repo doesn't have Auths identity data, the widget will show an error.
 
 **Supported forges:** GitHub and Gitea (including self-hosted). GitLab is not supported for auto-resolve because its API does not expose custom Git refs — use manual mode instead.
 
@@ -177,7 +177,7 @@ The resolver layer uses dynamic imports — if you only use manual `attestation`
 - Node.js >= 18
 - Rust 1.93+ with `wasm32-unknown-unknown` target (for WASM builds)
 - [wasm-pack](https://rustwasm.github.io/wasm-pack/)
-- The [auths](https://github.com/bordumb/auths) repo cloned alongside this one:
+- The [auths](https://github.com/auths-dev/auths) repo cloned alongside this one:
   ```
   auths-base/
   ├── auths/                  # main auths repo
