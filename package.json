@@ -43,15 +43,15 @@
     "keri",
     "ed25519"
   ],
-  "author": "bordumb",
+  "author": "auths-dev",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bordumb/auths-verify-widget.git"
+    "url": "https://github.com/auths-dev/auths-verify-widget.git"
   },
-  "homepage": "https://github.com/bordumb/auths-verify-widget#readme",
+  "homepage": "https://github.com/auths-dev/auths-verify-widget#readme",
   "bugs": {
-    "url": "https://github.com/bordumb/auths-verify-widget/issues"
+    "url": "https://github.com/auths-dev/auths-verify-widget/issues"
   },
   "devDependencies": {
     "@auths/verifier": "file:../auths/packages/auths-verifier-ts",
