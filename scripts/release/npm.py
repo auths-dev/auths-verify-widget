@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build and publish auths-verify to npm.
+Build and publish @auths-dev/verify to npm.
 
 Usage:
     python scripts/release/npm.py          # dry-run (shows what would happen)
@@ -30,7 +30,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_JSON = REPO_ROOT / "package.json"
-NPM_REGISTRY_URL = "https://registry.npmjs.org/auths-verify"
+NPM_REGISTRY_URL = "https://registry.npmjs.org/@auths-dev/verify"
 
 
 def get_version() -> str:
@@ -192,8 +192,8 @@ def main() -> None:
         if result.returncode != 0:
             print(f"\nWARNING: Failed to push tag {tag}", file=sys.stderr)
 
-    print(f"\nDone. Published auths-verify@{version} to npm.")
-    print(f"  https://www.npmjs.com/package/auths-verify")
+    print(f"\nDone. Published @auths-dev/verify@{version} to npm.")
+    print(f"  https://www.npmjs.com/package/@auths-dev/verify")
 
 
 if __name__ == "__main__":

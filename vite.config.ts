@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => {
         entry: resolve(__dirname, 'src/auths-verify.ts'),
         name: 'AuthsVerify',
         formats: ['es'],
-        fileName: () => isSlim ? 'slim/auths-verify' : 'auths-verify',
+        fileName: () => isSlim ? 'slim/auths-verify.mjs' : 'auths-verify.mjs',
       },
       outDir: 'dist',
       emptyOutDir: !isSlim,

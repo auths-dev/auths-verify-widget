@@ -1,7 +1,7 @@
 # `<auths-verify>` Web Component
 
-[![npm version](https://img.shields.io/npm/v/auths-verify.svg)](https://www.npmjs.com/package/auths-verify)
-[![license](https://img.shields.io/npm/l/auths-verify.svg)](https://github.com/auths-dev/auths-verify-widget/blob/main/LICENSE)
+[![npm version](https://img.shields.io/npm/v/@auths-dev/verify.svg)](https://www.npmjs.com/package/@auths-dev/verify)
+[![license](https://img.shields.io/npm/l/@auths-dev/verify.svg)](https://github.com/auths-dev/auths-verify-widget/blob/main/LICENSE)
 
 A drop-in web component that verifies [Auths](https://github.com/auths-dev/auths) decentralized identities — the open-source equivalent of GitHub's green "Verified" badge. Point it at any repository that uses Auths, and it cryptographically verifies the identity chain in the browser via WASM.
 
@@ -10,17 +10,17 @@ A drop-in web component that verifies [Auths](https://github.com/auths-dev/auths
 **CDN (no build step):**
 
 ```html
-<script type="module" src="https://unpkg.com/auths-verify/dist/auths-verify.mjs"></script>
+<script type="module" src="https://unpkg.com/@auths-dev/verify/dist/auths-verify.mjs"></script>
 ```
 
 **npm (for bundlers):**
 
 ```bash
-npm install auths-verify
+npm install @auths-dev/verify
 ```
 
 ```js
-import 'auths-verify';
+import '@auths-dev/verify';
 ```
 
 ## Quick Start
