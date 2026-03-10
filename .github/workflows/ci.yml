@@ -46,6 +46,9 @@ jobs:
       - name: Build WASM
         run: npm run build:wasm
 
+      - name: Copy WASM to verifier-ts (for typecheck path alias)
+        run: cp -r wasm ../auths/packages/auths-verifier-ts/wasm
+
       - name: Type check
         run: npm run typecheck
 
