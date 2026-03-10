@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>E2E Test Fixture</title>
+  <script type="module" src="/dist/auths-verify.mjs"></script>
+</head>
+<body>
+  <!-- Badge mode: repo-based verification (GitHub API will be mocked) -->
+  <auths-verify
+    id="badge-repo"
+    repo="test-org/test-repo"
+    forge="github"
+    mode="badge">
+  </auths-verify>
+
+  <!-- Detail mode: repo-based verification -->
+  <auths-verify
+    id="detail-repo"
+    repo="test-org/test-repo"
+    forge="github"
+    mode="detail">
+  </auths-verify>
+
+  <!-- Tooltip mode: repo-based verification -->
+  <auths-verify
+    id="tooltip-repo"
+    repo="test-org/test-repo"
+    forge="github"
+    mode="tooltip">
+  </auths-verify>
+
+  <!-- Error case: repo with no auths refs -->
+  <auths-verify
+    id="badge-empty"
+    repo="test-org/empty-repo"
+    forge="github"
+    mode="badge">
+  </auths-verify>
+</body>
+</html>
