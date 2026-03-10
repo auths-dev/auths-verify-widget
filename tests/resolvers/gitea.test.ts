@@ -9,7 +9,27 @@ const config: ForgeConfig = {
   repo: 'project',
 };
 
-const TEST_DID_KEY = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp';
+const TEST_CESR_KEY = 'DQIS37c2Ar3CzozrmU9KpbUWBYWMJhBWPV-wN50i-RGI';
+const TEST_KERI_PREFIX = 'EXrBYxo2ovC9iZIKgXZhbiDvD21eAVwoLnlziitHeTiM';
+
+const STATE_JSON = JSON.stringify({
+  version: 1,
+  state: {
+    prefix: TEST_KERI_PREFIX,
+    current_keys: [TEST_CESR_KEY],
+    sequence: 0,
+  },
+});
+
+const ATTESTATION_JSON = JSON.stringify({
+  version: 1,
+  rid: '.auths',
+  issuer: `did:keri:${TEST_KERI_PREFIX}`,
+  subject: 'did:key:z6MkDev1',
+  device_public_key: 'abcd1234',
+  identity_signature: 'sig1',
+  device_signature: 'sig2',
+});
 
 function mockFetch(responses: Record<string, unknown>) {
   return vi.fn(async (url: string) => {
@@ -37,7 +57,7 @@ describe('giteaAdapter', () => {
   it('should use Gitea API prefix for refs', async () => {
     global.fetch = mockFetch({
       '/api/v1/repos/user/project/git/refs/auths': [
-        { ref: 'refs/auths/identity', object: { sha: 'abc123' } },
+        { ref: 'refs/auths/registry', object: { sha: 'abc123' } },
       ],
     });
 
@@ -50,10 +70,9 @@ describe('giteaAdapter', () => {
   });
 
   it('should handle single-object response from Gitea', async () => {
-    // Some Gitea versions return a single object instead of array
     global.fetch = mockFetch({
       '/api/v1/repos/user/project/git/refs/auths': {
-        ref: 'refs/auths/identity',
+        ref: 'refs/auths/registry',
         object: { sha: 'abc123' },
       },
     });
@@ -62,35 +81,25 @@ describe('giteaAdapter', () => {
     expect(refs).toHaveLength(1);
   });
 
-  it('should resolve identity bundle', async () => {
-    const identityJson = JSON.stringify({ controller_did: TEST_DID_KEY });
-    const attestationJson = JSON.stringify({
-      version: 1,
-      rid: 'test',
-      issuer: TEST_DID_KEY,
-      subject: 'did:key:z6MkDev1',
-    });
-
+  it('should resolve identity from registry', async () => {
     global.fetch = mockFetch({
       'git/refs/auths': [
-        { ref: 'refs/auths/identity', object: { sha: 'commit1' } },
-        { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'commit2' } },
+        { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
       ],
-      'git/commits/commit1': { tree: { sha: 'tree1' } },
-      'git/trees/tree1': {
-        tree: [{ path: 'identity.json', sha: 'blob1' }],
+      'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
+      [`git/trees/tree-reg?recursive=1`]: {
+        tree: [
+          { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}/state.json`, sha: 'blob-state', type: 'blob' },
+          { path: `v1/devices/z6/Mk/did_key_z6MkDev1/attestation.json`, sha: 'blob-att', type: 'blob' },
+        ],
       },
-      'git/blobs/blob1': { content: btoa(identityJson), encoding: 'base64' },
-      'git/commits/commit2': { tree: { sha: 'tree2' } },
-      'git/trees/tree2': {
-        tree: [{ path: 'attestation.json', sha: 'blob2' }],
-      },
-      'git/blobs/blob2': { content: btoa(attestationJson), encoding: 'base64' },
+      'git/blobs/blob-state': { content: btoa(STATE_JSON), encoding: 'base64' },
+      'git/blobs/blob-att': { content: btoa(ATTESTATION_JSON), encoding: 'base64' },
     });
 
     const result = await giteaAdapter.resolve(config);
     expect(result.bundle).not.toBeNull();
-    expect(result.bundle!.identity_did).toBe(TEST_DID_KEY);
+    expect(result.bundle!.identity_did).toBe(`did:keri:${TEST_KERI_PREFIX}`);
     expect(result.bundle!.public_key_hex).toMatch(/^[0-9a-f]{64}$/);
     expect(result.bundle!.attestation_chain).toHaveLength(1);
   });

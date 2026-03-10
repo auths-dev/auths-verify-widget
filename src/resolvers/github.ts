@@ -1,24 +1,16 @@
 /**
  * GitHub adapter — resolves auths identity data via GitHub REST API.
  *
- * Resolution flow (matches Rust ref layout from layout.rs):
- * 1. List refs under refs/auths/
- * 2. Read identity ref → commit → tree → identity.json blob
- * 3. Extract public key from controller DID (did:key:z...)
- * 4. Discover device attestation refs
- * 5. Read attestation.json blobs for each device
- * 6. Return IdentityBundle
+ * Reads from refs/auths/registry — structured tree with:
+ *   v1/identities/XX/YY/<prefix>/state.json  (KERI identity state)
+ *   v1/devices/XX/YY/<did>/attestation.json   (device attestations)
  */
 
 import type { ForgeAdapter } from './adapter';
 import type { ForgeConfig, RefEntry, ResolveResult } from './types';
-import { didKeyToPublicKeyHex, sanitizeDidForRef } from './did-utils';
+import { cesrToPublicKeyHex } from './did-utils';
 
-// Git ref constants — mirrors auths-id/src/storage/layout.rs
-const IDENTITY_REF = 'refs/auths/identity';
-const DEVICE_PREFIX = 'refs/auths/keys';
-const IDENTITY_BLOB = 'identity.json';
-const ATTESTATION_BLOB = 'attestation.json';
+const REGISTRY_REF = 'refs/auths/registry';
 
 async function githubFetch(url: string): Promise<Response> {
   const res = await fetch(url, {
@@ -55,30 +47,33 @@ export const githubAdapter: ForgeAdapter = {
         return { bundle: null, error: 'No auths refs found in this repository' };
       }
 
-      // Step 1: Find and read identity ref
-      const identityRef = refs.find((r) => r.ref === IDENTITY_REF);
-      if (!identityRef) {
-        return { bundle: null, error: 'No identity ref found (refs/auths/identity)' };
+      const registryRef = refs.find((r) => r.ref === REGISTRY_REF);
+      if (!registryRef) {
+        return { bundle: null, error: 'No registry ref found (refs/auths/registry)' };
       }
 
-      // Follow commit → tree → identity.json blob
-      const identityBlob = await resolveTreeBlob(
-        config,
-        identityRef.sha,
-        IDENTITY_BLOB,
+      // Get commit → tree SHA
+      const commitUrl = `${config.baseUrl}/repos/${config.owner}/${config.repo}/git/commits/${registryRef.sha}`;
+      const commitRes = await githubFetch(commitUrl);
+      const commit: { tree: { sha: string } } = await commitRes.json();
+
+      // Get full recursive tree
+      const treeUrl = `${config.baseUrl}/repos/${config.owner}/${config.repo}/git/trees/${commit.tree.sha}?recursive=1`;
+      const treeRes = await githubFetch(treeUrl);
+      const tree: { tree: Array<{ path: string; sha: string; type: string }> } = await treeRes.json();
+
+      // Find identity state.json
+      const stateEntry = tree.tree.find(
+        (e) => e.type === 'blob' && /^v1\/identities\/[^/]{2}\/[^/]{2}\/[^/]+\/state\.json$/.test(e.path),
       );
-      if (!identityBlob) {
-        return { bundle: null, error: 'Could not read identity.json from identity ref' };
+      if (!stateEntry) {
+        return { bundle: null, error: 'No identity state found in registry' };
       }
 
-      const identity = JSON.parse(identityBlob);
-      const controllerDid: string = identity.controller_did ?? identity.identity_did;
+      // Extract KERI prefix from path: v1/identities/XX/YY/<prefix>/state.json
+      const keriPrefix = stateEntry.path.split('/')[4];
+      const controllerDid = `did:keri:${keriPrefix}`;
 
-      if (!controllerDid) {
-        return { bundle: null, error: 'No controller_did found in identity.json' };
-      }
-
-      // Apply identity filter if provided
       if (identityFilter && controllerDid !== identityFilter) {
         return {
           bundle: null,
@@ -86,35 +81,37 @@ export const githubAdapter: ForgeAdapter = {
         };
       }
 
-      // Step 2: Extract public key from DID
+      // Read state.json to get current public key (CESR-encoded)
+      const stateBlob = await this.readBlob(config, stateEntry.sha);
+      const state = JSON.parse(stateBlob);
+      const currentKeyCesr: string | undefined = state.state?.current_keys?.[0];
+
+      if (!currentKeyCesr) {
+        return { bundle: null, error: 'No current key found in identity state' };
+      }
+
       let publicKeyHex: string;
-      if (controllerDid.startsWith('did:key:z')) {
-        publicKeyHex = didKeyToPublicKeyHex(controllerDid);
-      } else {
+      try {
+        publicKeyHex = cesrToPublicKeyHex(currentKeyCesr);
+      } catch (err) {
         return {
           bundle: null,
-          error: `Cannot extract public key from ${controllerDid}. Only did:key is supported for auto-resolve.`,
+          error: `Failed to decode CESR key: ${err instanceof Error ? err.message : String(err)}`,
         };
       }
 
-      // Step 3: Discover device attestation refs
-      const deviceRefs = refs.filter((r) => r.ref.startsWith(DEVICE_PREFIX + '/'));
-      const attestationChain: object[] = [];
+      // Find all device attestation.json blobs
+      const attestationEntries = tree.tree.filter(
+        (e) => e.type === 'blob' && /^v1\/devices\/[^/]{2}\/[^/]{2}\/[^/]+\/attestation\.json$/.test(e.path),
+      );
 
-      for (const deviceRef of deviceRefs) {
-        // Only process refs that end with a blob-bearing path
-        // Device ref pattern: refs/auths/keys/<sanitized_did>/signatures
+      const attestationChain: object[] = [];
+      for (const entry of attestationEntries) {
         try {
-          const attestBlob = await resolveTreeBlob(
-            config,
-            deviceRef.sha,
-            ATTESTATION_BLOB,
-          );
-          if (attestBlob) {
-            attestationChain.push(JSON.parse(attestBlob));
-          }
+          const blob = await this.readBlob(config, entry.sha);
+          attestationChain.push(JSON.parse(blob));
         } catch {
-          // Skip unreadable device refs
+          // Skip unreadable attestations
         }
       }
 
@@ -133,28 +130,3 @@ export const githubAdapter: ForgeAdapter = {
     }
   },
 };
-
-/**
- * Follow a commit SHA → tree SHA → find a specific blob in the tree → read it.
- */
-async function resolveTreeBlob(
-  config: ForgeConfig,
-  commitSha: string,
-  blobName: string,
-): Promise<string | null> {
-  // Get commit to find tree SHA
-  const commitUrl = `${config.baseUrl}/repos/${config.owner}/${config.repo}/git/commits/${commitSha}`;
-  const commitRes = await githubFetch(commitUrl);
-  const commit: { tree: { sha: string } } = await commitRes.json();
-
-  // Get tree to find blob SHA
-  const treeUrl = `${config.baseUrl}/repos/${config.owner}/${config.repo}/git/trees/${commit.tree.sha}`;
-  const treeRes = await githubFetch(treeUrl);
-  const tree: { tree: Array<{ path: string; sha: string }> } = await treeRes.json();
-
-  const blobEntry = tree.tree.find((t) => t.path === blobName);
-  if (!blobEntry) return null;
-
-  // Read blob content
-  return githubAdapter.readBlob(config, blobEntry.sha);
-}

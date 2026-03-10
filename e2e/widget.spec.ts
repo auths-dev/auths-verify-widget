@@ -1,30 +1,40 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
-// Mock data — matches the structure the GitHub adapter expects
+// Mock data — matches the registry format (refs/auths/registry)
 // ---------------------------------------------------------------------------
 
-const TEST_DID = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp';
+const TEST_KERI_PREFIX = 'EXrBYxo2ovC9iZIKgXZhbiDvD21eAVwoLnlziitHeTiM';
+const TEST_CESR_KEY = 'DQIS37c2Ar3CzozrmU9KpbUWBYWMJhBWPV-wN50i-RGI';
 
-const IDENTITY_JSON = JSON.stringify({ controller_did: TEST_DID });
-const ATTESTATION_JSON = JSON.stringify({
+const STATE_JSON = JSON.stringify({
   version: 1,
-  rid: 'test-rid',
-  issuer: TEST_DID,
-  subject: 'did:key:z6MkDev1Device',
-  iat: '2025-01-01T00:00:00Z',
-  signature: 'deadbeef',
+  state: {
+    prefix: TEST_KERI_PREFIX,
+    current_keys: [TEST_CESR_KEY],
+    sequence: 0,
+  },
 });
 
-const IDENTITY_B64 = btoa(IDENTITY_JSON);
+const ATTESTATION_JSON = JSON.stringify({
+  version: 1,
+  rid: '.auths',
+  issuer: `did:keri:${TEST_KERI_PREFIX}`,
+  subject: 'did:key:z6MkDev1Device',
+  device_public_key: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
+  identity_signature: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+  device_signature: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+  timestamp: '2025-01-01T00:00:00Z',
+});
+
+const STATE_B64 = btoa(STATE_JSON);
 const ATTESTATION_B64 = btoa(ATTESTATION_JSON);
 
 // ---------------------------------------------------------------------------
-// Route handler: mocks the GitHub REST API for forge adapter
+// Route handler: mocks the GitHub REST API for forge adapter (registry format)
 // ---------------------------------------------------------------------------
 
 async function mockGitHubAPI(page: Page) {
-  // Intercept all requests to api.github.com
   await page.route('https://api.github.com/**', async (route) => {
     const url = route.request().url();
 
@@ -34,8 +44,7 @@ async function mockGitHubAPI(page: Page) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([
-          { ref: 'refs/auths/identity', object: { sha: 'commit-id-1' } },
-          { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'commit-att-1' } },
+          { ref: 'refs/auths/registry', object: { sha: 'commit-registry' } },
         ]),
       });
     }
@@ -50,49 +59,35 @@ async function mockGitHubAPI(page: Page) {
     }
 
     // 2. Get commit → tree SHA
-    if (url.includes('git/commits/commit-id-1')) {
+    if (url.includes('git/commits/commit-registry')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ tree: { sha: 'tree-identity' } }),
+        body: JSON.stringify({ tree: { sha: 'tree-registry' } }),
       });
     }
 
-    if (url.includes('git/commits/commit-att-1')) {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ tree: { sha: 'tree-attestation' } }),
-      });
-    }
-
-    // 3. Get tree → blob entries
-    if (url.includes('git/trees/tree-identity')) {
+    // 3. Get recursive tree → all blobs in registry
+    if (url.includes('git/trees/tree-registry')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          tree: [{ path: 'identity.json', sha: 'blob-identity' }],
-        }),
-      });
-    }
-
-    if (url.includes('git/trees/tree-attestation')) {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          tree: [{ path: 'attestation.json', sha: 'blob-attestation' }],
+          tree: [
+            { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}/state.json`, sha: 'blob-state', type: 'blob' },
+            { path: `v1/devices/z6/Mk/did_key_z6MkDev1Device/attestation.json`, sha: 'blob-attestation', type: 'blob' },
+            { path: 'v1/metadata.json', sha: 'blob-meta', type: 'blob' },
+          ],
         }),
       });
     }
 
     // 4. Read blobs
-    if (url.includes('git/blobs/blob-identity')) {
+    if (url.includes('git/blobs/blob-state')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ content: IDENTITY_B64, encoding: 'base64' }),
+        body: JSON.stringify({ content: STATE_B64, encoding: 'base64' }),
       });
     }
 
@@ -136,11 +131,11 @@ test.describe('auths-verify widget E2E', () => {
     await page.goto('/e2e/fixture.html');
   });
 
-  test('badge mode: resolves identity from mocked GitHub API and reaches terminal state', async ({ page }) => {
+  test('badge mode: resolves identity from mocked registry and reaches terminal state', async ({ page }) => {
     await waitForState(page, '#badge-repo');
 
     const state = await page.getAttribute('#badge-repo', 'data-state');
-    // The widget fetched refs, read identity.json, attempted WASM verification.
+    // The widget fetched registry, read state.json, attempted WASM verification.
     // With fake crypto data the result is either 'verified', 'invalid', or 'error'
     // — any of these proves the pipeline ran end-to-end.
     expect(['verified', 'invalid', 'error']).toContain(state);
@@ -197,7 +192,6 @@ test.describe('auths-verify widget E2E', () => {
   });
 
   test('events: widget emits auths-verified or auths-error', async ({ page }) => {
-    // Collect events from the badge-repo widget
     const events = await page.evaluate(() => {
       return new Promise<{ type: string; detail: unknown }[]>((resolve) => {
         const collected: { type: string; detail: unknown }[] = [];
@@ -211,7 +205,6 @@ test.describe('auths-verify widget E2E', () => {
           collected.push({ type: 'auths-error', detail: (e as CustomEvent).detail });
         });
 
-        // Wait for event (widget auto-verifies on connect)
         setTimeout(() => resolve(collected), 10_000);
       });
     });
@@ -245,5 +238,4 @@ test.describe('auths-verify widget E2E', () => {
     });
     expect(expanded).toBe('false');
   });
-
 });

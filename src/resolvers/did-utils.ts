@@ -66,6 +66,28 @@ export function didKeyToPublicKeyHex(didKey: string): string {
 }
 
 /**
+ * Decode a CESR-encoded Ed25519 public key to hex.
+ *
+ * CESR uses a 1-char type code prefix that replaces base64 padding.
+ * For Ed25519 keys: prefix 'D', total 44 chars.
+ * To decode: replace prefix with 'A' (zero byte), base64url-decode → 33 bytes,
+ * skip first byte, remaining 32 bytes are the raw key.
+ */
+export function cesrToPublicKeyHex(cesr: string): string {
+  if (cesr.length !== 44 || cesr[0] !== 'D') {
+    throw new Error(`Expected 44-char CESR Ed25519 key (D prefix), got: ${cesr}`);
+  }
+  const b64url = 'A' + cesr.slice(1);
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(b64);
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = binary.charCodeAt(i + 1);
+  }
+  return bytesToHex(bytes);
+}
+
+/**
  * Sanitize a DID for use in Git ref paths.
  * Matches Rust: layout.rs:247-251 — replace non-alphanumeric with '_'
  */

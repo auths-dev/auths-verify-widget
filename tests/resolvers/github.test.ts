@@ -9,8 +9,28 @@ const config: ForgeConfig = {
   repo: 'auths',
 };
 
-// Known did:key for test — we use a real-ish one
-const TEST_DID_KEY = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp';
+// CESR-encoded Ed25519 key for registry format
+const TEST_CESR_KEY = 'DQIS37c2Ar3CzozrmU9KpbUWBYWMJhBWPV-wN50i-RGI';
+const TEST_KERI_PREFIX = 'EXrBYxo2ovC9iZIKgXZhbiDvD21eAVwoLnlziitHeTiM';
+
+const STATE_JSON = JSON.stringify({
+  version: 1,
+  state: {
+    prefix: TEST_KERI_PREFIX,
+    current_keys: [TEST_CESR_KEY],
+    sequence: 0,
+  },
+});
+
+const ATTESTATION_JSON = JSON.stringify({
+  version: 1,
+  rid: '.auths',
+  issuer: `did:keri:${TEST_KERI_PREFIX}`,
+  subject: 'did:key:z6MkDev1',
+  device_public_key: 'abcd1234',
+  identity_signature: 'sig1',
+  device_signature: 'sig2',
+});
 
 function mockFetch(responses: Record<string, unknown>) {
   return vi.fn(async (url: string) => {
@@ -30,6 +50,26 @@ function mockFetch(responses: Record<string, unknown>) {
   });
 }
 
+/** Standard mock for a registry with one identity and one device */
+function registryMock() {
+  return mockFetch({
+    'matching-refs/auths/': [
+      { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
+    ],
+    'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
+    [`git/trees/tree-reg?recursive=1`]: {
+      tree: [
+        { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}/state.json`, sha: 'blob-state', type: 'blob' },
+        { path: `v1/devices/z6/Mk/did_key_z6MkDev1/attestation.json`, sha: 'blob-att', type: 'blob' },
+        { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}`, sha: 'tree-id', type: 'tree' },
+        { path: 'v1/metadata.json', sha: 'blob-meta', type: 'blob' },
+      ],
+    },
+    'git/blobs/blob-state': { content: btoa(STATE_JSON), encoding: 'base64' },
+    'git/blobs/blob-att': { content: btoa(ATTESTATION_JSON), encoding: 'base64' },
+  });
+}
+
 describe('githubAdapter', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -38,57 +78,31 @@ describe('githubAdapter', () => {
   it('should list auths refs', async () => {
     global.fetch = mockFetch({
       'matching-refs/auths/': [
-        { ref: 'refs/auths/identity', object: { sha: 'abc123' } },
-        { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'def456' } },
+        { ref: 'refs/auths/registry', object: { sha: 'abc123' } },
       ],
     });
 
     const refs = await githubAdapter.listAuthsRefs(config);
-    expect(refs).toHaveLength(2);
-    expect(refs[0]).toEqual({ ref: 'refs/auths/identity', sha: 'abc123' });
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toEqual({ ref: 'refs/auths/registry', sha: 'abc123' });
   });
 
   it('should read a blob with base64 decoding', async () => {
-    const content = JSON.stringify({ controller_did: TEST_DID_KEY });
-    const base64Content = btoa(content);
-
+    const content = JSON.stringify({ test: true });
     global.fetch = mockFetch({
-      'git/blobs/': { content: base64Content, encoding: 'base64' },
+      'git/blobs/': { content: btoa(content), encoding: 'base64' },
     });
 
     const blob = await githubAdapter.readBlob(config, 'sha123');
     expect(blob).toBe(content);
   });
 
-  it('should resolve identity bundle from refs', async () => {
-    const identityJson = JSON.stringify({ controller_did: TEST_DID_KEY });
-    const attestationJson = JSON.stringify({
-      version: 1,
-      rid: 'test',
-      issuer: TEST_DID_KEY,
-      subject: 'did:key:z6MkDev1',
-    });
-
-    global.fetch = mockFetch({
-      'matching-refs/auths/': [
-        { ref: 'refs/auths/identity', object: { sha: 'commit1' } },
-        { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'commit2' } },
-      ],
-      'git/commits/commit1': { tree: { sha: 'tree1' } },
-      'git/trees/tree1': {
-        tree: [{ path: 'identity.json', sha: 'blob1' }],
-      },
-      'git/blobs/blob1': { content: btoa(identityJson), encoding: 'base64' },
-      'git/commits/commit2': { tree: { sha: 'tree2' } },
-      'git/trees/tree2': {
-        tree: [{ path: 'attestation.json', sha: 'blob2' }],
-      },
-      'git/blobs/blob2': { content: btoa(attestationJson), encoding: 'base64' },
-    });
+  it('should resolve identity from registry', async () => {
+    global.fetch = registryMock();
 
     const result = await githubAdapter.resolve(config);
     expect(result.bundle).not.toBeNull();
-    expect(result.bundle!.identity_did).toBe(TEST_DID_KEY);
+    expect(result.bundle!.identity_did).toBe(`did:keri:${TEST_KERI_PREFIX}`);
     expect(result.bundle!.public_key_hex).toMatch(/^[0-9a-f]{64}$/);
     expect(result.bundle!.attestation_chain).toHaveLength(1);
   });
@@ -103,53 +117,60 @@ describe('githubAdapter', () => {
     expect(result.error).toContain('No auths refs found');
   });
 
-  it('should return error when identity ref is missing', async () => {
+  it('should return error when registry ref is missing', async () => {
     global.fetch = mockFetch({
       'matching-refs/auths/': [
-        { ref: 'refs/auths/keys/dev1', object: { sha: 'abc' } },
+        { ref: 'refs/auths/something-else', object: { sha: 'abc' } },
       ],
     });
 
     const result = await githubAdapter.resolve(config);
     expect(result.bundle).toBeNull();
-    expect(result.error).toContain('No identity ref found');
+    expect(result.error).toContain('No registry ref found');
+  });
+
+  it('should return error when registry has no identity state', async () => {
+    global.fetch = mockFetch({
+      'matching-refs/auths/': [
+        { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
+      ],
+      'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
+      [`git/trees/tree-reg?recursive=1`]: {
+        tree: [
+          { path: 'v1/metadata.json', sha: 'blob-meta', type: 'blob' },
+        ],
+      },
+    });
+
+    const result = await githubAdapter.resolve(config);
+    expect(result.bundle).toBeNull();
+    expect(result.error).toContain('No identity state found');
   });
 
   it('should apply identity filter', async () => {
-    const identityJson = JSON.stringify({ controller_did: TEST_DID_KEY });
+    global.fetch = registryMock();
 
-    global.fetch = mockFetch({
-      'matching-refs/auths/': [
-        { ref: 'refs/auths/identity', object: { sha: 'commit1' } },
-      ],
-      'git/commits/commit1': { tree: { sha: 'tree1' } },
-      'git/trees/tree1': {
-        tree: [{ path: 'identity.json', sha: 'blob1' }],
-      },
-      'git/blobs/blob1': { content: btoa(identityJson), encoding: 'base64' },
-    });
-
-    const result = await githubAdapter.resolve(config, 'did:key:z6MkDifferent');
+    const result = await githubAdapter.resolve(config, 'did:keri:EDifferentPrefix');
     expect(result.bundle).toBeNull();
     expect(result.error).toContain('does not match filter');
   });
 
-  it('should return error for non did:key identities', async () => {
-    const identityJson = JSON.stringify({ controller_did: 'did:keri:EOrg123' });
-
+  it('should resolve with zero attestations', async () => {
     global.fetch = mockFetch({
       'matching-refs/auths/': [
-        { ref: 'refs/auths/identity', object: { sha: 'commit1' } },
+        { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
       ],
-      'git/commits/commit1': { tree: { sha: 'tree1' } },
-      'git/trees/tree1': {
-        tree: [{ path: 'identity.json', sha: 'blob1' }],
+      'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
+      [`git/trees/tree-reg?recursive=1`]: {
+        tree: [
+          { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}/state.json`, sha: 'blob-state', type: 'blob' },
+        ],
       },
-      'git/blobs/blob1': { content: btoa(identityJson), encoding: 'base64' },
+      'git/blobs/blob-state': { content: btoa(STATE_JSON), encoding: 'base64' },
     });
 
     const result = await githubAdapter.resolve(config);
-    expect(result.bundle).toBeNull();
-    expect(result.error).toContain('Only did:key is supported');
+    expect(result.bundle).not.toBeNull();
+    expect(result.bundle!.attestation_chain).toHaveLength(0);
   });
 });
