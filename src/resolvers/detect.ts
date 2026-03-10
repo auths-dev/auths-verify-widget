@@ -9,11 +9,16 @@ import type { ForgeConfig, ForgeType } from './types';
  * - forgeHint overrides auto-detection
  */
 export function detectForge(repoUrl: string, forgeHint?: string): ForgeConfig | null {
+  // Detect shorthand "owner/repo" — no protocol means not a real URL
+  const isFullUrl = /^https?:\/\//.test(repoUrl);
+
   let url: URL | null = null;
-  try {
-    url = new URL(repoUrl);
-  } catch {
-    // Not a full URL — try owner/repo shorthand
+  if (isFullUrl) {
+    try {
+      url = new URL(repoUrl);
+    } catch {
+      return null;
+    }
   }
 
   let owner: string;
