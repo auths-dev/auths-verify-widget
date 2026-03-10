@@ -13,7 +13,7 @@ import { didKeyToPublicKeyHex } from './did-utils';
 
 // Git ref constants — mirrors auths-id/src/storage/layout.rs
 const IDENTITY_REF = 'refs/auths/identity';
-const DEVICE_PREFIX = 'refs/auths/devices/nodes';
+const DEVICE_PREFIX = 'refs/auths/keys';
 const IDENTITY_BLOB = 'identity.json';
 const ATTESTATION_BLOB = 'attestation.json';
 

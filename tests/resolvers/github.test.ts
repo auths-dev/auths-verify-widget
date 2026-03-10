@@ -39,7 +39,7 @@ describe('githubAdapter', () => {
     global.fetch = mockFetch({
       'matching-refs/auths/': [
         { ref: 'refs/auths/identity', object: { sha: 'abc123' } },
-        { ref: 'refs/auths/devices/nodes/dev1/signatures', object: { sha: 'def456' } },
+        { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'def456' } },
       ],
     });
 
@@ -72,7 +72,7 @@ describe('githubAdapter', () => {
     global.fetch = mockFetch({
       'matching-refs/auths/': [
         { ref: 'refs/auths/identity', object: { sha: 'commit1' } },
-        { ref: 'refs/auths/devices/nodes/dev1/signatures', object: { sha: 'commit2' } },
+        { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'commit2' } },
       ],
       'git/commits/commit1': { tree: { sha: 'tree1' } },
       'git/trees/tree1': {
@@ -106,7 +106,7 @@ describe('githubAdapter', () => {
   it('should return error when identity ref is missing', async () => {
     global.fetch = mockFetch({
       'matching-refs/auths/': [
-        { ref: 'refs/auths/devices/nodes/dev1', object: { sha: 'abc' } },
+        { ref: 'refs/auths/keys/dev1', object: { sha: 'abc' } },
       ],
     });
 

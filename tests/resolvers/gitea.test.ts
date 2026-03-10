@@ -74,7 +74,7 @@ describe('giteaAdapter', () => {
     global.fetch = mockFetch({
       'git/refs/auths': [
         { ref: 'refs/auths/identity', object: { sha: 'commit1' } },
-        { ref: 'refs/auths/devices/nodes/dev1/signatures', object: { sha: 'commit2' } },
+        { ref: 'refs/auths/keys/dev1/signatures', object: { sha: 'commit2' } },
       ],
       'git/commits/commit1': { tree: { sha: 'tree1' } },
       'git/trees/tree1': {

@@ -16,7 +16,7 @@ import { didKeyToPublicKeyHex, sanitizeDidForRef } from './did-utils';
 
 // Git ref constants — mirrors auths-id/src/storage/layout.rs
 const IDENTITY_REF = 'refs/auths/identity';
-const DEVICE_PREFIX = 'refs/auths/devices/nodes';
+const DEVICE_PREFIX = 'refs/auths/keys';
 const IDENTITY_BLOB = 'identity.json';
 const ATTESTATION_BLOB = 'attestation.json';
 
@@ -103,7 +103,7 @@ export const githubAdapter: ForgeAdapter = {
 
       for (const deviceRef of deviceRefs) {
         // Only process refs that end with a blob-bearing path
-        // Device ref pattern: refs/auths/devices/nodes/<sanitized_did>/signatures
+        // Device ref pattern: refs/auths/keys/<sanitized_did>/signatures
         try {
           const attestBlob = await resolveTreeBlob(
             config,
