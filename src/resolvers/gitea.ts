@@ -1,21 +1,18 @@
 /**
  * Gitea adapter — resolves auths identity data via Gitea REST API.
  *
- * Mirrors the GitHub adapter with Gitea-specific API paths:
- *   /api/v1/repos/{owner}/{repo}/git/...
+ * Reads from refs/auths/registry — structured tree with:
+ *   v1/identities/XX/YY/<prefix>/state.json  (KERI identity state)
+ *   v1/devices/XX/YY/<did>/attestation.json   (device attestations)
  *
  * Base URL is configurable for self-hosted instances.
  */
 
 import type { ForgeAdapter } from './adapter';
 import type { ForgeConfig, RefEntry, ResolveResult } from './types';
-import { didKeyToPublicKeyHex } from './did-utils';
+import { cesrToPublicKeyHex } from './did-utils';
 
-// Git ref constants — mirrors auths-id/src/storage/layout.rs
-const IDENTITY_REF = 'refs/auths/identity';
-const DEVICE_PREFIX = 'refs/auths/keys';
-const IDENTITY_BLOB = 'identity.json';
-const ATTESTATION_BLOB = 'attestation.json';
+const REGISTRY_REF = 'refs/auths/registry';
 
 async function giteaFetch(url: string): Promise<Response> {
   const res = await fetch(url, {
@@ -29,11 +26,9 @@ async function giteaFetch(url: string): Promise<Response> {
 
 export const giteaAdapter: ForgeAdapter = {
   async listAuthsRefs(config: ForgeConfig): Promise<RefEntry[]> {
-    // Gitea API: GET /api/v1/repos/{owner}/{repo}/git/refs/auths
     const url = `${config.baseUrl}/api/v1/repos/${config.owner}/${config.repo}/git/refs/auths`;
     const res = await giteaFetch(url);
     const data: Array<{ ref: string; object: { sha: string } }> = await res.json();
-    // Gitea may return a single object or array depending on version
     const entries = Array.isArray(data) ? data : [data];
     return entries.map((entry) => ({ ref: entry.ref, sha: entry.object.sha }));
   },
@@ -55,24 +50,28 @@ export const giteaAdapter: ForgeAdapter = {
         return { bundle: null, error: 'No auths refs found in this repository' };
       }
 
-      // Find and read identity ref
-      const identityRef = refs.find((r) => r.ref === IDENTITY_REF);
-      if (!identityRef) {
-        return { bundle: null, error: 'No identity ref found (refs/auths/identity)' };
+      const registryRef = refs.find((r) => r.ref === REGISTRY_REF);
+      if (!registryRef) {
+        return { bundle: null, error: 'No registry ref found (refs/auths/registry)' };
       }
 
-      // Follow commit → tree → identity.json blob
-      const identityBlob = await resolveTreeBlob(config, identityRef.sha, IDENTITY_BLOB);
-      if (!identityBlob) {
-        return { bundle: null, error: 'Could not read identity.json from identity ref' };
+      const commitUrl = `${config.baseUrl}/api/v1/repos/${config.owner}/${config.repo}/git/commits/${registryRef.sha}`;
+      const commitRes = await giteaFetch(commitUrl);
+      const commit: { tree: { sha: string } } = await commitRes.json();
+
+      const treeUrl = `${config.baseUrl}/api/v1/repos/${config.owner}/${config.repo}/git/trees/${commit.tree.sha}?recursive=1`;
+      const treeRes = await giteaFetch(treeUrl);
+      const tree: { tree: Array<{ path: string; sha: string; type: string }> } = await treeRes.json();
+
+      const stateEntry = tree.tree.find(
+        (e) => e.type === 'blob' && /^v1\/identities\/[^/]{2}\/[^/]{2}\/[^/]+\/state\.json$/.test(e.path),
+      );
+      if (!stateEntry) {
+        return { bundle: null, error: 'No identity state found in registry' };
       }
 
-      const identity = JSON.parse(identityBlob);
-      const controllerDid: string = identity.controller_did ?? identity.identity_did;
-
-      if (!controllerDid) {
-        return { bundle: null, error: 'No controller_did found in identity.json' };
-      }
+      const keriPrefix = stateEntry.path.split('/')[4];
+      const controllerDid = `did:keri:${keriPrefix}`;
 
       if (identityFilter && controllerDid !== identityFilter) {
         return {
@@ -81,29 +80,35 @@ export const giteaAdapter: ForgeAdapter = {
         };
       }
 
-      // Extract public key from DID
+      const stateBlob = await this.readBlob(config, stateEntry.sha);
+      const state = JSON.parse(stateBlob);
+      const currentKeyCesr: string | undefined = state.state?.current_keys?.[0];
+
+      if (!currentKeyCesr) {
+        return { bundle: null, error: 'No current key found in identity state' };
+      }
+
       let publicKeyHex: string;
-      if (controllerDid.startsWith('did:key:z')) {
-        publicKeyHex = didKeyToPublicKeyHex(controllerDid);
-      } else {
+      try {
+        publicKeyHex = cesrToPublicKeyHex(currentKeyCesr);
+      } catch (err) {
         return {
           bundle: null,
-          error: `Cannot extract public key from ${controllerDid}. Only did:key is supported for auto-resolve.`,
+          error: `Failed to decode CESR key: ${err instanceof Error ? err.message : String(err)}`,
         };
       }
 
-      // Discover device attestation refs
-      const deviceRefs = refs.filter((r) => r.ref.startsWith(DEVICE_PREFIX + '/'));
-      const attestationChain: object[] = [];
+      const attestationEntries = tree.tree.filter(
+        (e) => e.type === 'blob' && /^v1\/devices\/[^/]{2}\/[^/]{2}\/[^/]+\/attestation\.json$/.test(e.path),
+      );
 
-      for (const deviceRef of deviceRefs) {
+      const attestationChain: object[] = [];
+      for (const entry of attestationEntries) {
         try {
-          const attestBlob = await resolveTreeBlob(config, deviceRef.sha, ATTESTATION_BLOB);
-          if (attestBlob) {
-            attestationChain.push(JSON.parse(attestBlob));
-          }
+          const blob = await this.readBlob(config, entry.sha);
+          attestationChain.push(JSON.parse(blob));
         } catch {
-          // Skip unreadable device refs
+          // Skip unreadable attestations
         }
       }
 
@@ -122,22 +127,3 @@ export const giteaAdapter: ForgeAdapter = {
     }
   },
 };
-
-async function resolveTreeBlob(
-  config: ForgeConfig,
-  commitSha: string,
-  blobName: string,
-): Promise<string | null> {
-  const commitUrl = `${config.baseUrl}/api/v1/repos/${config.owner}/${config.repo}/git/commits/${commitSha}`;
-  const commitRes = await giteaFetch(commitUrl);
-  const commit: { tree: { sha: string } } = await commitRes.json();
-
-  const treeUrl = `${config.baseUrl}/api/v1/repos/${config.owner}/${config.repo}/git/trees/${commit.tree.sha}`;
-  const treeRes = await giteaFetch(treeUrl);
-  const tree: { tree: Array<{ path: string; sha: string }> } = await treeRes.json();
-
-  const blobEntry = tree.tree.find((t) => t.path === blobName);
-  if (!blobEntry) return null;
-
-  return giteaAdapter.readBlob(config, blobEntry.sha);
-}
