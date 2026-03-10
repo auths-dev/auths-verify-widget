@@ -33,6 +33,11 @@ class AuthsVerify extends HTMLElement {
   // --- Lifecycle ---
 
   connectedCallback(): void {
+    // Honour initial data-state attribute for static/visual demos
+    const initial = this.getAttribute('data-state') as ComponentState | null;
+    if (initial && initial !== 'idle') {
+      this.#state = initial;
+    }
     this.#render();
     if (this.autoVerify && this.#hasInput()) {
       this.#scheduleVerify();
