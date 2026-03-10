@@ -9,28 +9,36 @@ import type { ForgeConfig, ForgeType } from './types';
  * - forgeHint overrides auto-detection
  */
 export function detectForge(repoUrl: string, forgeHint?: string): ForgeConfig | null {
-  let url: URL;
+  let url: URL | null = null;
   try {
     url = new URL(repoUrl);
   } catch {
-    return null;
+    // Not a full URL — try owner/repo shorthand
   }
 
-  // Strip .git suffix and trailing slash from pathname
-  const path = url.pathname.replace(/\.git$/, '').replace(/\/$/, '');
-  const segments = path.split('/').filter(Boolean);
+  let owner: string;
+  let repo: string;
 
-  if (segments.length < 2) return null;
-
-  const owner = segments[0];
-  const repo = segments[1];
+  if (url) {
+    const path = url.pathname.replace(/\.git$/, '').replace(/\/$/, '');
+    const segments = path.split('/').filter(Boolean);
+    if (segments.length < 2) return null;
+    owner = segments[0];
+    repo = segments[1];
+  } else {
+    // Handle "owner/repo" shorthand
+    const parts = repoUrl.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    owner = parts[0];
+    repo = parts[1];
+  }
 
   let type: ForgeType;
   let baseUrl: string;
 
   if (forgeHint) {
     type = forgeHint as ForgeType;
-  } else {
+  } else if (url) {
     const host = url.hostname.toLowerCase();
     if (host === 'github.com') {
       type = 'github';
@@ -39,6 +47,9 @@ export function detectForge(repoUrl: string, forgeHint?: string): ForgeConfig | 
     } else {
       type = 'gitea';
     }
+  } else {
+    // Shorthand without forge hint — assume GitHub
+    type = 'github';
   }
 
   switch (type) {
@@ -46,9 +57,10 @@ export function detectForge(repoUrl: string, forgeHint?: string): ForgeConfig | 
       baseUrl = 'https://api.github.com';
       break;
     case 'gitlab':
-      baseUrl = `${url.protocol}//${url.host}`;
+      baseUrl = url ? `${url.protocol}//${url.host}` : 'https://gitlab.com';
       break;
     case 'gitea':
+      if (!url) return null; // Gitea requires full URL for self-hosted
       baseUrl = `${url.protocol}//${url.host}`;
       break;
     default:
