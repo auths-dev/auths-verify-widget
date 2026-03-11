@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { didKeyToPublicKeyHex, sanitizeDidForRef } from '../../src/resolvers/did-utils';
+import {
+  cesrToPublicKeyHex,
+  didKeyToPublicKeyHex,
+  sanitizeDidForRef,
+} from '../../src/resolvers/did-utils';
 
 describe('didKeyToPublicKeyHex', () => {
   it('should extract Ed25519 public key from did:key:z...', () => {
@@ -25,6 +29,32 @@ describe('didKeyToPublicKeyHex', () => {
     const hex1 = didKeyToPublicKeyHex(did);
     const hex2 = didKeyToPublicKeyHex(did);
     expect(hex1).toBe(hex2);
+  });
+});
+
+describe('cesrToPublicKeyHex', () => {
+  it('decodes CESR Ed25519 key matching Rust KeriPublicKey::parse', () => {
+    // Real test vector from identity E6IXlw5-lnX88r3WZCt3u1qyN_Xlq7nQjtoTmuOfMIjI
+    // CESR key from state.json current_keys[0]
+    const cesr = 'D1P_LPk3v4aTOxFMeLJq55lsPL5-i_BhRfIn27APru2Q';
+    // Expected: Rust KeriPublicKey::parse strips D, base64url-decodes 43 chars → 32 bytes
+    const expected = 'd4ffcb3e4defe1a4cec4531e2c9ab9e65b0f2f9fa2fc18517c89f6ec03ebbb64';
+    expect(cesrToPublicKeyHex(cesr)).toBe(expected);
+  });
+
+  it('decodes all-zero key correctly', () => {
+    // Rust: KeriPublicKey::parse("DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") → [0u8; 32]
+    const cesr = 'DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const expected = '0'.repeat(64);
+    expect(cesrToPublicKeyHex(cesr)).toBe(expected);
+  });
+
+  it('rejects non-D prefix', () => {
+    expect(() => cesrToPublicKeyHex('X' + 'A'.repeat(43))).toThrow('Expected 44-char CESR');
+  });
+
+  it('rejects wrong length', () => {
+    expect(() => cesrToPublicKeyHex('DAAA')).toThrow('Expected 44-char CESR');
   });
 });
 

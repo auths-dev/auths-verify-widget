@@ -23,6 +23,7 @@ class AuthsVerify extends HTMLElement {
   #report: VerificationReport | null = null;
   #debounceTimer: ReturnType<typeof setTimeout> | null = null;
   #detailOpen = false;
+  #verifying = false;
   #shadow: ShadowRoot;
 
   constructor() {
@@ -56,8 +57,8 @@ class AuthsVerify extends HTMLElement {
       return;
     }
 
-    // Data attributes changed — re-verify if auto
-    if (this.autoVerify && this.isConnected && this.#hasInput()) {
+    // Data attributes changed — re-verify if auto (but not while already verifying)
+    if (this.autoVerify && this.isConnected && !this.#verifying && this.#hasInput()) {
       this.#scheduleVerify();
     }
   }
@@ -148,6 +149,7 @@ class AuthsVerify extends HTMLElement {
     }
 
     this.#setState('loading');
+    this.#verifying = true;
 
     try {
       // If repo is set but attestation data is missing, resolve from forge
@@ -207,6 +209,8 @@ class AuthsVerify extends HTMLElement {
           detail: { error: err instanceof Error ? err.message : String(err) },
         }),
       );
+    } finally {
+      this.#verifying = false;
     }
   }
 

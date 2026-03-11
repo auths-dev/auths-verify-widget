@@ -14,9 +14,9 @@ let initPromise: Promise<void> | null = null;
 let wasmModule: WasmModule | null = null;
 
 interface WasmModule {
-  default: (input?: BufferSource | string) => Promise<void>;
-  verifyAttestationWithResult(attestationJson: string, issuerPkHex: string): string;
-  verifyChainJson(attestationsJsonArray: string, rootPkHex: string): string;
+  default?: (input?: BufferSource | string) => Promise<void>;
+  verifyAttestationWithResult(attestationJson: string, issuerPkHex: string): string | Promise<string>;
+  verifyChainJson(attestationsJsonArray: string, rootPkHex: string): string | Promise<string>;
 }
 
 function isInlined(): boolean {
@@ -27,17 +27,18 @@ async function loadWasm(wasmUrl?: string): Promise<void> {
   // Dynamic import of the WASM JS glue — path resolved by Vite alias
   const wasm: WasmModule = await import(/* @vite-ignore */ 'auths-verifier-wasm');
 
-  if (isInlined()) {
-    // Decode base64-inlined WASM and initialize from buffer
-    const binary = Uint8Array.from(atob(INLINE_WASM_BASE64!), c => c.charCodeAt(0));
-    await wasm.default(binary);
-  } else if (wasmUrl) {
-    // Fetch WASM from explicit URL
-    await wasm.default(wasmUrl);
-  } else {
-    // Default: let wasm-bindgen resolve the .wasm file relative to the JS glue
-    await wasm.default();
+  if (typeof wasm.default === 'function') {
+    // Module requires explicit initialization (slim build or dev mode)
+    if (isInlined()) {
+      const binary = Uint8Array.from(atob(INLINE_WASM_BASE64!), c => c.charCodeAt(0));
+      await wasm.default(binary);
+    } else if (wasmUrl) {
+      await wasm.default(wasmUrl);
+    } else {
+      await wasm.default();
+    }
   }
+  // If no .default export, WASM was auto-initialized by vite-plugin-wasm (ESM direct import)
 
   wasmModule = wasm;
 }
@@ -66,7 +67,7 @@ export async function verifyAttestation(
 ): Promise<VerificationResult> {
   await ensureInit();
   try {
-    const resultJson = wasmModule!.verifyAttestationWithResult(attestationJson, issuerPublicKeyHex);
+    const resultJson = await wasmModule!.verifyAttestationWithResult(attestationJson, issuerPublicKeyHex);
     return JSON.parse(resultJson) as VerificationResult;
   } catch (error) {
     return {
@@ -89,7 +90,7 @@ export async function verifyChain(
   );
 
   try {
-    const reportJson = wasmModule!.verifyChainJson(attestationsJson, rootPublicKeyHex);
+    const reportJson = await wasmModule!.verifyChainJson(attestationsJson, rootPublicKeyHex);
     return JSON.parse(reportJson) as VerificationReport;
   } catch (error) {
     return {

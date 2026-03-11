@@ -68,21 +68,22 @@ export function didKeyToPublicKeyHex(didKey: string): string {
 /**
  * Decode a CESR-encoded Ed25519 public key to hex.
  *
- * CESR uses a 1-char type code prefix that replaces base64 padding.
- * For Ed25519 keys: prefix 'D', total 44 chars.
- * To decode: replace prefix with 'A' (zero byte), base64url-decode → 33 bytes,
- * skip first byte, remaining 32 bytes are the raw key.
+ * CESR uses a 1-char type code prefix. For Ed25519 keys: prefix 'D', total 44 chars.
+ * To decode: strip the prefix, base64url-decode the remaining 43 chars (with padding)
+ * to get the raw 32-byte key. This matches the Rust `KeriPublicKey::parse` implementation.
  */
 export function cesrToPublicKeyHex(cesr: string): string {
   if (cesr.length !== 44 || cesr[0] !== 'D') {
     throw new Error(`Expected 44-char CESR Ed25519 key (D prefix), got: ${cesr}`);
   }
-  const b64url = 'A' + cesr.slice(1);
-  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  // Strip the 'D' prefix, decode the remaining 43 base64url chars
+  const payload = cesr.slice(1);
+  // Convert base64url to standard base64 and add padding (43 % 4 = 3 → 1 '=')
+  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/') + '=';
   const binary = atob(b64);
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = binary.charCodeAt(i + 1);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
   return bytesToHex(bytes);
 }
