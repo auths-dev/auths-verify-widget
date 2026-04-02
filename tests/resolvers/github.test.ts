@@ -9,28 +9,26 @@ const config: ForgeConfig = {
   repo: 'auths',
 };
 
-// CESR-encoded Ed25519 key for registry format
-const TEST_CESR_KEY = 'DQIS37c2Ar3CzozrmU9KpbUWBYWMJhBWPV-wN50i-RGI';
-const TEST_KERI_PREFIX = 'EXrBYxo2ovC9iZIKgXZhbiDvD21eAVwoLnlziitHeTiM';
+const RELEASE_MOCK = {
+  assets: [
+    {
+      id: 42,
+      name: 'hello.tar.gz.auths.json',
+      browser_download_url:
+        'https://github.com/bordumb/auths/releases/download/v0.0.1/hello.tar.gz.auths.json',
+    },
+  ],
+};
 
-const STATE_JSON = JSON.stringify({
+const ATTESTATION = {
   version: 1,
-  state: {
-    prefix: TEST_KERI_PREFIX,
-    current_keys: [TEST_CESR_KEY],
-    sequence: 0,
-  },
-});
-
-const ATTESTATION_JSON = JSON.stringify({
-  version: 1,
-  rid: '.auths',
-  issuer: `did:keri:${TEST_KERI_PREFIX}`,
+  rid: 'sha256:abc123',
+  issuer: 'did:keri:EXrBYxo2ovC9iZIKgXZhbiDvD21eAVwoLnlziitHeTiM',
   subject: 'did:key:z6MkDev1',
-  device_public_key: 'abcd1234',
+  device_public_key: 'abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234',
   identity_signature: 'sig1',
   device_signature: 'sig2',
-});
+};
 
 function mockFetch(responses: Record<string, unknown>) {
   return vi.fn(async (url: string) => {
@@ -50,23 +48,14 @@ function mockFetch(responses: Record<string, unknown>) {
   });
 }
 
-/** Standard mock for a registry with one identity and one device */
-function registryMock() {
+/** Mock releases/latest + contents/ for the happy path */
+function releaseMock() {
   return mockFetch({
-    'matching-refs/auths/': [
-      { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
-    ],
-    'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
-    [`git/trees/tree-reg?recursive=1`]: {
-      tree: [
-        { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}/state.json`, sha: 'blob-state', type: 'blob' },
-        { path: `v1/devices/z6/Mk/did_key_z6MkDev1/attestation.json`, sha: 'blob-att', type: 'blob' },
-        { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}`, sha: 'tree-id', type: 'tree' },
-        { path: 'v1/metadata.json', sha: 'blob-meta', type: 'blob' },
-      ],
+    'releases/latest': RELEASE_MOCK,
+    [`contents/${RELEASE_MOCK.assets[0].name}`]: {
+      content: btoa(JSON.stringify(ATTESTATION)),
+      encoding: 'base64',
     },
-    'git/blobs/blob-state': { content: btoa(STATE_JSON), encoding: 'base64' },
-    'git/blobs/blob-att': { content: btoa(ATTESTATION_JSON), encoding: 'base64' },
   });
 }
 
@@ -75,102 +64,87 @@ describe('githubAdapter', () => {
     vi.restoreAllMocks();
   });
 
-  it('should list auths refs', async () => {
-    global.fetch = mockFetch({
-      'matching-refs/auths/': [
-        { ref: 'refs/auths/registry', object: { sha: 'abc123' } },
-      ],
-    });
-
-    const refs = await githubAdapter.listAuthsRefs(config);
-    expect(refs).toHaveLength(1);
-    expect(refs[0]).toEqual({ ref: 'refs/auths/registry', sha: 'abc123' });
-  });
-
-  it('should read a blob with base64 decoding', async () => {
-    const content = JSON.stringify({ test: true });
-    global.fetch = mockFetch({
-      'git/blobs/': { content: btoa(content), encoding: 'base64' },
-    });
-
-    const blob = await githubAdapter.readBlob(config, 'sha123');
-    expect(blob).toBe(content);
-  });
-
-  it('should resolve identity from registry', async () => {
-    global.fetch = registryMock();
+  it('should resolve identity from latest release', async () => {
+    global.fetch = releaseMock();
 
     const result = await githubAdapter.resolve(config);
     expect(result.bundle).not.toBeNull();
-    expect(result.bundle!.identity_did).toBe(`did:keri:${TEST_KERI_PREFIX}`);
-    expect(result.bundle!.public_key_hex).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.bundle!.identity_did).toBe(ATTESTATION.issuer);
+    expect(result.bundle!.public_key_hex).toBe(ATTESTATION.device_public_key);
     expect(result.bundle!.attestation_chain).toHaveLength(1);
   });
 
-  it('should return error when no auths refs exist', async () => {
+  it('should return error when no assets in release', async () => {
     global.fetch = mockFetch({
-      'matching-refs/auths/': [],
+      'releases/latest': { assets: [] },
     });
 
     const result = await githubAdapter.resolve(config);
     expect(result.bundle).toBeNull();
-    expect(result.error).toContain('No auths refs found');
+    expect(result.error).toContain('No assets found');
   });
 
-  it('should return error when registry ref is missing', async () => {
+  it('should return error when no .auths.json asset found', async () => {
     global.fetch = mockFetch({
-      'matching-refs/auths/': [
-        { ref: 'refs/auths/something-else', object: { sha: 'abc' } },
-      ],
-    });
-
-    const result = await githubAdapter.resolve(config);
-    expect(result.bundle).toBeNull();
-    expect(result.error).toContain('No registry ref found');
-  });
-
-  it('should return error when registry has no identity state', async () => {
-    global.fetch = mockFetch({
-      'matching-refs/auths/': [
-        { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
-      ],
-      'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
-      [`git/trees/tree-reg?recursive=1`]: {
-        tree: [
-          { path: 'v1/metadata.json', sha: 'blob-meta', type: 'blob' },
-        ],
+      'releases/latest': {
+        assets: [{ id: 1, name: 'README.md', browser_download_url: 'https://example.com' }],
       },
     });
 
     const result = await githubAdapter.resolve(config);
     expect(result.bundle).toBeNull();
-    expect(result.error).toContain('No identity state found');
+    expect(result.error).toContain('No .auths.json');
+  });
+
+  it('should fall back to asset API when contents API 404s', async () => {
+    // releases/latest OK, contents/ will 404 (not in responses), asset API returns attestation
+    global.fetch = mockFetch({
+      'releases/latest': RELEASE_MOCK,
+      [`releases/assets/${RELEASE_MOCK.assets[0].id}`]: ATTESTATION,
+    });
+
+    const result = await githubAdapter.resolve(config);
+    expect(result.bundle).not.toBeNull();
+    expect(result.bundle!.identity_did).toBe(ATTESTATION.issuer);
+    expect(result.bundle!.public_key_hex).toBe(ATTESTATION.device_public_key);
+    expect(result.bundle!.attestation_chain).toHaveLength(1);
+  });
+
+  it('should return error when attestation missing required fields', async () => {
+    global.fetch = mockFetch({
+      'releases/latest': RELEASE_MOCK,
+      [`contents/${RELEASE_MOCK.assets[0].name}`]: {
+        content: btoa(JSON.stringify({ version: 1 })),
+        encoding: 'base64',
+      },
+    });
+
+    const result = await githubAdapter.resolve(config);
+    expect(result.bundle).toBeNull();
+    expect(result.error).toContain('missing required fields');
   });
 
   it('should apply identity filter', async () => {
-    global.fetch = registryMock();
+    global.fetch = releaseMock();
 
     const result = await githubAdapter.resolve(config, 'did:keri:EDifferentPrefix');
     expect(result.bundle).toBeNull();
     expect(result.error).toContain('does not match filter');
   });
 
-  it('should resolve with zero attestations', async () => {
-    global.fetch = mockFetch({
-      'matching-refs/auths/': [
-        { ref: 'refs/auths/registry', object: { sha: 'commit-reg' } },
-      ],
-      'git/commits/commit-reg': { tree: { sha: 'tree-reg' } },
-      [`git/trees/tree-reg?recursive=1`]: {
-        tree: [
-          { path: `v1/identities/EX/rB/${TEST_KERI_PREFIX}/state.json`, sha: 'blob-state', type: 'blob' },
-        ],
-      },
-      'git/blobs/blob-state': { content: btoa(STATE_JSON), encoding: 'base64' },
-    });
+  it('should return error when releases API fails (no releases)', async () => {
+    global.fetch = mockFetch({});
 
     const result = await githubAdapter.resolve(config);
-    expect(result.bundle).not.toBeNull();
-    expect(result.bundle!.attestation_chain).toHaveLength(0);
+    expect(result.bundle).toBeNull();
+    expect(result.error).toContain('GitHub API 404');
+  });
+
+  it('should return stub values for listAuthsRefs and readBlob', async () => {
+    const refs = await githubAdapter.listAuthsRefs(config);
+    expect(refs).toEqual([]);
+
+    const blob = await githubAdapter.readBlob(config, 'any-sha');
+    expect(blob).toBe('');
   });
 });
