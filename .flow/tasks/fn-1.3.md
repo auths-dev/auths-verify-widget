@@ -44,9 +44,13 @@ Depends on **fn-1.1** (both edit the README).
 - [ ] The documented sha384 matches the output of the generation step (no hand-fabricated hash).
 - [ ] `npm run build` succeeds and the hash step runs without error; `npm run typecheck` passes.
 ## Done summary
-TBD
-
+- Investigation result (slim-WASM truth): rebuilt both bundles — `dist/auths-verify.mjs` and `dist/slim/auths-verify.mjs` are **byte-identical (672784 bytes, same sha384)**. The slim build inlines the WASM via `vite-plugin-wasm` and emits no separate `.wasm`. So a single `integrity` hash covers the whole runtime for both builds; the README's "slim loads `.wasm` separately" claim was false and is corrected.
+- README: replaced the unpinned unpkg `<script>` with a version-pinned (`@0.3.0`) snippet carrying `integrity="sha384-…"` + `crossorigin="anonymous"`, for both unpkg and jsDelivr; added a callout explaining why pinning is mandatory with SRI (the hash is byte-exact; `@latest` breaks it) and why `crossorigin` is required.
+- Added `scripts/sri.mjs` + `npm run sri` to compute the sha384 from the built bundle, so the documented hash is reproducible and regenerated per release rather than hand-copied.
+- Why: G4.5 SRI half — give the one-line CDN embed real supply-chain guidance.
+- Verification: `npm run build` (full+slim) succeeds; `npm run sri` → `sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l`, which matches the value in README (consistency check passes); `npm run typecheck` clean; `npx vitest run` 80/80. `dist/` is gitignored (built on publish).
+- Follow-ups: (1) at release, run `npm run sri` against the *published* version's bytes and confirm the README hash — the value shown is from a local build of this source. (2) The slim build no longer produces a smaller artifact (vite-plugin-wasm inlines regardless of `INLINE_WASM`); truly externalizing the `.wasm` is a separate build-architecture change, out of GTM scope.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 07d2a3e5de43cab38abf4226502d38e19f7ca695
+- Tests: npm run build, npm run sri, npm run typecheck, npx vitest run
 - PRs:

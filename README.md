@@ -9,8 +9,38 @@ A drop-in web component that verifies [Auths](https://github.com/auths-dev/auths
 
 **CDN (no build step):**
 
+Pin an exact version and add a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) (SRI) hash so the browser refuses a tampered bundle:
+
 ```html
-<script type="module" src="https://unpkg.com/@auths-dev/verify/dist/auths-verify.mjs"></script>
+<script
+  type="module"
+  src="https://unpkg.com/@auths-dev/verify@0.3.0/dist/auths-verify.mjs"
+  integrity="sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l"
+  crossorigin="anonymous"
+></script>
+```
+
+> **Pin a version with SRI — never `@latest`.** The `integrity` hash is
+> byte-exact, so it only validates against an immutable, version-pinned URL
+> (`@0.3.0`). A moving `@latest` URL changes bytes on every release and would
+> break the hash — and the badge — without warning. `crossorigin="anonymous"`
+> is required: without it the browser fetches the cross-origin script opaquely,
+> can't read it to verify, and the load fails. The hash above is for `@0.3.0`;
+> regenerate it for any other version with `npm run sri`, or copy it from the
+> file's page on [jsDelivr](https://www.jsdelivr.com/), which displays the SRI
+> hash for you. The WASM verifier is base64-inlined into this single `.mjs`, so
+> one `integrity` hash covers the entire runtime — there is no separate `.wasm`
+> fetch to protect.
+
+[jsDelivr](https://www.jsdelivr.com/) serves the same published file, so the same pin + `integrity` works there too:
+
+```html
+<script
+  type="module"
+  src="https://cdn.jsdelivr.net/npm/@auths-dev/verify@0.3.0/dist/auths-verify.mjs"
+  integrity="sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l"
+  crossorigin="anonymous"
+></script>
 ```
 
 **npm (for bundlers):**
@@ -223,8 +253,10 @@ npm run build
 ```
 
 Outputs:
-- `dist/auths-verify.mjs` — single file with WASM base64-inlined
-- `dist/slim/auths-verify.mjs` — smaller JS, loads `.wasm` separately
+- `dist/auths-verify.mjs` — single self-contained file with the WASM base64-inlined. Recommended for CDN + SRI: one file, one `integrity` hash covers the whole runtime.
+- `dist/slim/auths-verify.mjs` — the `./slim` export. Note: it currently also inlines the WASM (via `vite-plugin-wasm`), so it is the same size as the full bundle and shares the same single-hash SRI story; there is no separate `.wasm` to fetch today.
+
+Generate the SRI hash for the built bundle(s) with `npm run sri`.
 
 ## License
 
