@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildEmbed, canonicalRepoUrl, VERSION, SRI } from '../examples/embed-snippet';
+import { buildEmbed, canonicalRepoUrl, previewDocument, VERSION, SRI } from '../examples/embed-snippet';
 
 describe('buildEmbed', () => {
   const CANON = 'https://github.com/auths-dev/auths';
@@ -66,6 +66,33 @@ describe('buildEmbed', () => {
 
   it('rejects empty input', () => {
     expect(buildEmbed('   ').ok).toBe(false);
+  });
+});
+
+describe('previewDocument', () => {
+  it('renders a sandboxed-iframe doc that loads the pinned CDN bundle', () => {
+    const doc = previewDocument('https://github.com/auths-dev/auths');
+    expect(doc).toContain('<!DOCTYPE html>');
+    expect(doc).toContain(`@auths-dev/verify@${VERSION}/dist/auths-verify.mjs`);
+    expect(doc).toContain('crossorigin="anonymous"');
+    expect(doc).toContain('<auths-verify repo="https://github.com/auths-dev/auths">');
+  });
+
+  it('omits the integrity attribute in the preview (renders published bytes)', () => {
+    expect(previewDocument('https://github.com/o/r')).not.toContain('integrity=');
+  });
+
+  it('passes through a forge attribute', () => {
+    expect(previewDocument('https://github.com/o/r', ' forge="gitea"')).toContain('forge="gitea"');
+  });
+
+  it('reuses the forgeAttr from buildEmbed so snippet and preview agree', () => {
+    const r = buildEmbed('https://github.com/org/repo', 'gitea');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const doc = previewDocument(r.repo, r.forgeAttr);
+    expect(doc).toContain('forge="gitea"');
+    expect(doc).toContain(`repo="${r.repo}"`);
   });
 });
 

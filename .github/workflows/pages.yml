@@ -1,0 +1,71 @@
+name: Deploy playground to GitHub Pages
+
+# One-time setup: in repo Settings → Pages, set "Build and deployment" Source to
+# "GitHub Actions". Until that is done, this workflow's deploy step will fail.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/**'
+      - 'src/resolvers/**'
+      - 'vite.pages.config.ts'
+      - 'package.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: auths-verify-widget
+    steps:
+      - name: Checkout widget repo
+        uses: actions/checkout@v4
+        with:
+          path: auths-verify-widget
+
+      - name: Checkout auths repo (for local @auths/verifier dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: auths-dev/auths
+          path: auths
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: auths-verify-widget/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build playground
+        run: npm run build:pages
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: auths-verify-widget/dist-pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

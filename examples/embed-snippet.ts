@@ -23,7 +23,7 @@ export function canonicalRepoUrl(cfg: ForgeConfig): string {
 }
 
 export type BuildResult =
-  | { ok: true; snippet: string; repo: string; forge: ForgeConfig['type'] }
+  | { ok: true; snippet: string; repo: string; forge: ForgeConfig['type']; forgeAttr: string }
   | { ok: false; error: string };
 
 /**
@@ -61,5 +61,27 @@ export function buildEmbed(input: string, forgeHint?: string): BuildResult {
     `  crossorigin="anonymous"></script>\n\n` +
     `<auths-verify repo="${repo}"${forgeAttr}></auths-verify>`;
 
-  return { ok: true, snippet, repo, forge: cfg.type };
+  return { ok: true, snippet, repo, forge: cfg.type, forgeAttr };
+}
+
+/**
+ * Build a self-contained document that renders a live badge for `repo` from the
+ * pinned CDN bundle. Intended for `iframe.srcdoc` with `sandbox="allow-scripts"`
+ * so the demo runs but cannot script the parent page.
+ *
+ * The `integrity` attribute is intentionally omitted here so the preview always
+ * loads the published bytes (the copyable snippet from `buildEmbed` keeps SRI).
+ * SRI only blocks *tampered* bytes, so the rendered result is identical either
+ * way.
+ */
+export function previewDocument(repo: string, forgeAttr = ''): string {
+  return [
+    '<!DOCTYPE html>',
+    '<html lang="en"><head><meta charset="utf-8">',
+    '<style>body{font:14px system-ui,sans-serif;margin:18px;display:flex;justify-content:center}</style>',
+    '</head><body>',
+    `<script type="module" src="${cdnUrl()}" crossorigin="anonymous"></script>`,
+    `<auths-verify repo="${repo}"${forgeAttr}></auths-verify>`,
+    '</body></html>',
+  ].join('\n');
 }

@@ -73,6 +73,8 @@ That's it. The widget will:
 
 **Supported forges:** GitHub (via Release assets) and Gitea (via Git refs, including self-hosted). GitLab is not supported for auto-resolve because its API does not expose custom Git refs — use manual mode instead.
 
+> **Build your embed in the browser:** the [Embed Builder](https://auths-dev.github.io/auths-verify-widget/) lets you paste a repo URL, preview the live badge, and copy a version-pinned, SRI-protected snippet.
+
 ## Display Modes
 
 ### Badge (default)
