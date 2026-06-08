@@ -43,9 +43,13 @@ Depends on **fn-1.1** (both edit the README; sequencing avoids re-introducing th
 - [ ] `npm run typecheck` passes.
 - [ ] If GitLab-subgroup handling was touched, its known limitation is noted in a comment; otherwise unchanged.
 ## Done summary
-TBD
-
+- Rewrote `detectForge` normalization so every pasted form reduces to the same `{owner, repo, forge, baseUrl}`: full URLs (with `.git`, trailing `/`, `/tree/main`, `?query#hash`), protocol-less hosts (`github.com/org/repo`, `git.example.com/user/repo`), and `owner/repo` / `owner/repo.git` shorthand.
+- Fixed the real bug: shorthand `owner/repo.git` previously yielded `repo='repo.git'` — now stripped. Dots inside shorthand repo names (`owner/my.repo`) are preserved.
+- Documented full URL as the canonical form and the GitLab-subgroup known limitation in the JSDoc.
+- Confirmed all README/example embed snippets already use the full-URL `repo=` form (no short-form demos).
+- Why: G4.4 code foundation — the embed generator (fn-1.4) reuses this single normalizer so the runtime widget and the generated snippet behave identically.
+- Verification: added 8 unit tests (detect.test.ts 10 → 18), incl. a table asserting 8 GitHub input forms collapse to one config; `npx vitest run` 80/80; `npm run typecheck` clean.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 8ff53e3a49572455fe5861986ce438d7932399a5
+- Tests: npm run typecheck, npx vitest run
 - PRs:
