@@ -39,9 +39,13 @@ Depends on **fn-1.2** (URL normalization / canonical form) and **fn-1.3** (the e
 - [ ] Config is reflected in the URL query (`?repo=…`) so the page is deep-linkable.
 - [ ] `npm run typecheck` passes (if any TS is added); page loads without console errors.
 ## Done summary
-TBD
-
+- Added `examples/embed-builder.html` — a paste-repo-URL → copy-snippet generator. Pasting a full URL or `owner/repo` produces the canonical full-URL `<auths-verify>` element plus the pinned (`@0.3.0`) + `integrity` + `crossorigin` `<script>` from fn-1.3.
+- Extracted the pure logic into `examples/embed-snippet.ts` (`buildEmbed`/`canonicalRepoUrl`) which **reuses `detectForge`** for normalization — no duplicated parser. The HTML is DOM + clipboard wiring only.
+- Accessible copy button: real `<button type="button">` with `aria-label`, an `aria-live="polite"` "Copied" status, `:focus-visible` styling, and a secure-context guard with a transient-`<textarea>` `execCommand` fallback (removed synchronously so tab order is intact). Copies the canonical snippet string, not the DOM.
+- Config reflected in the URL query (`?repo=…&forge=…`) for deep-linking; the page prefills from the query on load. Linked from `examples/index.html`.
+- Why: G4.4 UI — the generator half of the combined builder/playground (live preview + Pages deploy follow in fn-1.5).
+- Verification: 9 new unit tests (`tests/embed-snippet.test.ts`) covering 8 input forms collapsing to one canonical snippet, pinned/SRI/crossorigin presence, forge-attribute logic, and validation errors — `npx vitest run` 89/89. Standalone `tsc` on `embed-snippet.ts` clean; project `npm run typecheck` clean. Served under Vite: `embed-builder.html` 200 and the `embed-snippet.ts → detect.ts` module graph transforms with no errors.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: d875f0d0ec1d788d3e0b20a770ef29ac40f8cb29
+- Tests: npx vitest run, npm run typecheck
 - PRs:
