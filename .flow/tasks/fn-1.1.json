@@ -1,16 +1,26 @@
 {
-  "assignee": null,
+  "assignee": "bordumbb@gmail.com",
   "claim_note": "",
-  "claimed_at": null,
+  "claimed_at": "2026-06-08T22:38:46.846335Z",
   "created_at": "2026-06-08T22:06:20.287294Z",
   "depends_on": [
     "fn-1.6"
   ],
   "epic": "fn-1",
+  "evidence": {
+    "commits": [
+      "6ce96797123da2cad76ca5b1cb3f1f951552b865"
+    ],
+    "prs": [],
+    "tests": [
+      "npm run typecheck",
+      "npx vitest run"
+    ]
+  },
   "id": "fn-1.1",
   "priority": null,
   "spec_path": ".flow/tasks/fn-1.1.md",
-  "status": "todo",
+  "status": "done",
   "title": "Reconcile GitHub resolver docs + e2e test + adapter comment to Releases-asset reality",
-  "updated_at": "2026-06-08T22:37:17.806310Z"
+  "updated_at": "2026-06-08T22:44:10.719442Z"
 }

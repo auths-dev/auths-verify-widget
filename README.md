@@ -33,15 +33,15 @@ Add the widget to any page and point it at a repository:
 
 That's it. The widget will:
 
-1. Call the GitHub API to read the repository's `refs/auths/` identity data
-2. Extract the public key from the identity's `did:key`
+1. Fetch the repository's latest GitHub Release and locate the `*.auths.json` attestation asset
+2. Read the verification key (Ed25519 or P-256) from the attestation
 3. Load the WASM verification engine
-4. Cryptographically verify the full attestation chain
+4. Cryptographically verify the attestation chain
 5. Display a badge showing the result (Verified, Invalid, Expired, etc.)
 
-**Prerequisite:** The repository owner must have set up an Auths identity with [`auths init`](https://github.com/auths-dev/auths). If the repo doesn't have Auths identity data, the widget will show an error.
+**Prerequisite:** The repository owner must have published an Auths attestation as a `*.auths.json` asset on a GitHub Release (Gitea repos expose it via `refs/auths/` instead). If the repo has no Auths attestation, the widget will show an error.
 
-**Supported forges:** GitHub and Gitea (including self-hosted). GitLab is not supported for auto-resolve because its API does not expose custom Git refs — use manual mode instead.
+**Supported forges:** GitHub (via Release assets) and Gitea (via Git refs, including self-hosted). GitLab is not supported for auto-resolve because its API does not expose custom Git refs — use manual mode instead.
 
 ## Display Modes
 
@@ -113,7 +113,7 @@ Or for a full chain:
 |---|---|---|
 | `attestation` | JSON string | Single attestation to verify |
 | `attestations` | JSON array string | Chain of attestations to verify |
-| `public-key` | hex string | Root/issuer Ed25519 public key (64 hex chars) |
+| `public-key` | hex string | Root/issuer public key — Ed25519 (64 hex chars) or P-256 (66 hex chars, compressed) |
 
 ## JavaScript API
 
@@ -160,13 +160,14 @@ Available properties: `--auths-{state}-bg`, `--auths-{state}-fg`, `--auths-{stat
 
 When you set `repo="https://github.com/user/repo"`:
 
-1. The widget parses the URL and detects the forge (GitHub, Gitea, or GitLab)
-2. It calls the forge's REST API to list Git refs under `refs/auths/`
-3. It reads `identity.json` from `refs/auths/identity` to get the controller DID
-4. It extracts the Ed25519 public key from the `did:key:z...` identifier (pure TypeScript, no WASM needed)
-5. It reads `attestation.json` from each device ref under `refs/auths/devices/nodes/`
-6. It loads the WASM verification engine and cryptographically verifies the attestation chain
-7. It renders the result as a badge
+1. The widget parses the URL and detects the forge (GitHub, Gitea, or GitLab).
+2. It resolves the attestation data — the mechanism depends on the forge:
+   - **GitHub:** fetches the repository's latest Release (`/repos/{owner}/{repo}/releases/latest`), finds the `*.auths.json` asset, and downloads it (via the Contents API, falling back to the Release asset API).
+   - **Gitea:** reads the auths data from Git refs under `refs/auths/` via the Gitea REST API.
+   - **GitLab:** not supported for auto-resolve (its REST API does not expose the required data) — use manual mode.
+3. It derives the verification key (Ed25519 or P-256): for GitHub, the device public key carried in the attestation; for Gitea, extracted from the controller's `did:key`/CESR identifier (pure TypeScript, no WASM needed).
+4. It loads the WASM verification engine and cryptographically verifies the attestation chain.
+5. It renders the result as a badge.
 
 The resolver layer uses dynamic imports — if you only use manual `attestation`/`public-key` attributes, the resolver code is never loaded (zero bundle size impact).
 

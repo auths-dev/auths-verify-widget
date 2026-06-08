@@ -49,9 +49,15 @@ Make every **GitHub** resolver surface tell the truth: the widget resolves attes
 - [ ] `tests/e2e/live-resolve.test.ts` no longer asserts `githubAdapter.listAuthsRefs()` returns refs; the GitHub case reflects Releases-asset reality (Gitea case still asserts refs). The test file is internally consistent (would pass if run against a live/mocked Releases asset).
 - [ ] `npm run typecheck` and `npm test` pass.
 ## Done summary
-TBD
-
+- Corrected every GitHub-resolver surface to the Releases-asset reality: README Quick Start + "How It Works" (forge-split: GitHub = `*.auths.json` Release asset, Gitea = `refs/auths/`, GitLab = unsupported), prerequisite, supported-forges line, and the manual-mode public-key row (Ed25519 or P-256).
+- CHANGELOG: added `[0.3.0]` documenting the refs→Releases pivot + P-256; annotated the obsolete 0.1.1 GitHub-adapter line as superseded (removed the `refs/auths/identity` / `refs/auths/devices/nodes` strings).
+- `examples/auto-resolve.html` intro reworded; `adapter.ts` interface doc made forge-neutral.
+- Rewrote the CI-excluded `tests/e2e/live-resolve.test.ts`: GitHub `listAuthsRefs` now asserted as the `[]` stub; resolve steps accept a well-formed bundle OR a well-formed "no asset" error (the example asset is pending Stream D / D-6).
+- Why: D-5, the #1 credibility blocker — docs claimed git-refs resolution the GitHub adapter abandoned two migrations ago.
+- Left Gitea/GitLab refs wording intact (legitimately refs-based).
+- Verification: drift grep clean on README/CHANGELOG/examples; `grep refs/auths/registry src/resolvers/gitea.ts` still present; `npm run typecheck` clean; `npx vitest run` 72/72; standalone `tsc` on the rewritten e2e file compiles.
+- Follow-up: live e2e green path requires D-6 (publish a real `*.auths.json` asset on example-verify-badge — Stream D, out of this repo).
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 6ce96797123da2cad76ca5b1cb3f1f951552b865
+- Tests: npm run typecheck, npx vitest run
 - PRs:

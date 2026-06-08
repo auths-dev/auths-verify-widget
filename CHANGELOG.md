@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-08
+
+### Changed
+
+- **resolver:** GitHub adapter now resolves attestations from **GitHub Release assets** — it fetches the latest release (`/releases/latest`), locates the `*.auths.json` asset, and downloads it via the Contents API (falling back to the Release asset API). It no longer reads Git refs. `listAuthsRefs`/`readBlob` remain only as `ForgeAdapter` interface stubs for GitHub; Gitea still resolves via Git refs. _(Supersedes the refs-based GitHub adapter described under 0.1.1.)_
+- **docs:** "How It Works", Quick Start, and the auto-resolve example corrected to describe the GitHub Release-asset flow (the previous Git-refs description was stale).
+
+### Added
+
+- **resolver:** P-256 key extraction alongside Ed25519 in both the `did:key` decoder (multicodec `0x80 0x24` → 33-byte compressed SEC1) and the CESR decoder (`1AAJ`/`1AAI` derivation codes, 48 chars). Curve is dispatched on the in-band tag, never on byte length; mirrors Rust `KeriPublicKey::parse`.
+
+> Note: 0.2.x history is summarized in this entry rather than reconstructed in detail.
+
 ## [0.1.1] - 2026-02-16
 
 ### Added
@@ -14,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **resolver:** Auto-resolve identity and attestation data from a repository URL via new `repo` attribute. No more manual JSON — `<auths-verify repo="https://github.com/user/repo">` just works.
 - **resolver:** `forge` attribute to override auto-detection of forge type (`github`, `gitea`, `gitlab`).
 - **resolver:** `identity` attribute to filter to a specific DID when a repository has multiple identities.
-- **resolver:** GitHub adapter — resolves `refs/auths/identity` and `refs/auths/devices/nodes/*/` via GitHub REST API, extracts public key from `did:key:z...`, reads attestation chain.
+- **resolver:** GitHub adapter — resolved identity and attestation data via the GitHub REST API and extracted the public key from `did:key:z...`. _(Superseded in 0.3.0 — the GitHub adapter now resolves from Release assets; see above.)_
 - **resolver:** Gitea adapter — mirrors GitHub adapter with `/api/v1/` prefix and configurable base URL for self-hosted instances.
 - **resolver:** GitLab stub — returns descriptive error explaining GitLab does not expose custom Git refs via its REST API.
 - **resolver:** Pure TypeScript `did:key:z...` to Ed25519 public key hex extraction (inline base58btc decoder, multicodec prefix stripping). Runs before WASM loads.
