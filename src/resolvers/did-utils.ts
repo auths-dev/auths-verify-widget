@@ -1,11 +1,20 @@
 /**
- * Pure TypeScript did:key:z... → Ed25519 public key hex extraction.
+ * Pure TypeScript did:key / CESR → public-key-hex extraction (Ed25519 + P-256).
  *
- * Uses base58btc decoding + multicodec prefix stripping (0xED 0x01).
- * No external dependencies — runs before WASM loads.
+ * Curve is dispatched on the in-band tag — the multicodec varint for did:key, the
+ * derivation-code prefix for CESR — never on byte length (per the repo's wire-format
+ * curve-tagging rule). The returned hex is 32 bytes for Ed25519 and 33 bytes
+ * (compressed SEC1) for P-256; the WASM verifier resolves the curve from that length
+ * at its ingestion boundary (32 → Ed25519, 33 → P-256). No external dependencies —
+ * runs before WASM loads.
  */
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+/** Ed25519 public-key multicodec prefix (varint of 0xED). */
+const ED25519_MULTICODEC = [0xed, 0x01];
+/** P-256 compressed public-key multicodec prefix (varint of 0x1200). */
+const P256_MULTICODEC = [0x80, 0x24];
 
 /** Decode a base58btc-encoded string to bytes */
 function base58Decode(input: string): Uint8Array {
@@ -37,13 +46,35 @@ function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Decode a base64url string (no/any padding) to bytes, mirroring Rust URL_SAFE_NO_PAD. */
+function base64UrlToBytes(input: string): Uint8Array {
+  let b64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const remainder = b64.length % 4;
+  if (remainder === 2) b64 += '==';
+  else if (remainder === 3) b64 += '=';
+  else if (remainder === 1) throw new Error('Invalid base64url length');
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/** Whether `bytes` starts with the two-byte multicodec `prefix`. */
+function hasMulticodec(bytes: Uint8Array, prefix: number[]): boolean {
+  return bytes.length >= prefix.length && prefix.every((b, i) => bytes[i] === b);
+}
+
 /**
- * Extract Ed25519 public key hex from a did:key:z... identifier.
+ * Extract a public key (hex) from a did:key:z... identifier.
  *
- * The multibase prefix 'z' indicates base58btc encoding.
- * After decoding, the first two bytes are the multicodec prefix:
- * 0xED 0x01 = Ed25519 public key.
- * The remaining 32 bytes are the raw public key.
+ * The multibase prefix 'z' is base58btc. After decoding, the leading multicodec
+ * varint selects the curve:
+ * - `0xED 0x01` → Ed25519 (`z6Mk…`), 32-byte key.
+ * - `0x80 0x24` → P-256 compressed (`zDna…`), 33-byte SEC1 key.
+ *
+ * Returns the raw key hex (no multicodec). Throws on any other multicodec.
  */
 export function didKeyToPublicKeyHex(didKey: string): string {
   if (!didKey.startsWith('did:key:z')) {
@@ -54,38 +85,56 @@ export function didKeyToPublicKeyHex(didKey: string): string {
   const encoded = didKey.slice('did:key:z'.length);
   const decoded = base58Decode(encoded);
 
-  // Verify multicodec prefix for Ed25519: 0xED 0x01
-  if (decoded.length < 34 || decoded[0] !== 0xed || decoded[1] !== 0x01) {
-    throw new Error(
-      `Expected Ed25519 multicodec prefix (0xED 0x01), got: 0x${bytesToHex(decoded.slice(0, 2))}`,
-    );
+  if (hasMulticodec(decoded, ED25519_MULTICODEC)) {
+    if (decoded.length < 2 + 32) {
+      throw new Error(`Truncated Ed25519 did:key: need 34 bytes, got ${decoded.length}`);
+    }
+    return bytesToHex(decoded.slice(2, 2 + 32));
   }
 
-  // Remaining 32 bytes are the public key
-  return bytesToHex(decoded.slice(2, 34));
+  if (hasMulticodec(decoded, P256_MULTICODEC)) {
+    if (decoded.length < 2 + 33) {
+      throw new Error(`Truncated P-256 did:key: need 35 bytes, got ${decoded.length}`);
+    }
+    return bytesToHex(decoded.slice(2, 2 + 33));
+  }
+
+  throw new Error(
+    `Unsupported did:key multicodec (expected Ed25519 [0xED,0x01] or P-256 [0x80,0x24]), ` +
+      `got: 0x${bytesToHex(decoded.slice(0, 2))}`,
+  );
 }
 
 /**
- * Decode a CESR-encoded Ed25519 public key to hex.
+ * Decode a CESR-encoded verkey to hex (Ed25519 or P-256).
  *
- * CESR uses a 1-char type code prefix. For Ed25519 keys: prefix 'D', total 44 chars.
- * To decode: strip the prefix, base64url-decode the remaining 43 chars (with padding)
- * to get the raw 32-byte key. This matches the Rust `KeriPublicKey::parse` implementation.
+ * Dispatches on the derivation-code prefix, matching Rust `KeriPublicKey::parse`:
+ * - Ed25519: `D`/`B` (1-char code) + 43 base64url chars = 44 total → 32 bytes.
+ * - P-256:   `1AAJ`/`1AAI` (4-char code) + 44 base64url chars = 48 total → 33 bytes
+ *   (compressed SEC1). `1AAJ` is transferable, `1AAI` non-transferable; both decode
+ *   to the same point.
  */
 export function cesrToPublicKeyHex(cesr: string): string {
-  if (cesr.length !== 44 || cesr[0] !== 'D') {
-    throw new Error(`Expected 44-char CESR Ed25519 key (D prefix), got: ${cesr}`);
+  if (cesr.length === 44 && (cesr[0] === 'D' || cesr[0] === 'B')) {
+    const bytes = base64UrlToBytes(cesr.slice(1));
+    if (bytes.length !== 32) {
+      throw new Error(`Expected 32-byte Ed25519 key, decoded ${bytes.length} bytes`);
+    }
+    return bytesToHex(bytes);
   }
-  // Strip the 'D' prefix, decode the remaining 43 base64url chars
-  const payload = cesr.slice(1);
-  // Convert base64url to standard base64 and add padding (43 % 4 = 3 → 1 '=')
-  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/') + '=';
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+
+  if (cesr.length === 48 && (cesr.startsWith('1AAJ') || cesr.startsWith('1AAI'))) {
+    const bytes = base64UrlToBytes(cesr.slice(4));
+    if (bytes.length !== 33) {
+      throw new Error(`Expected 33-byte P-256 key, decoded ${bytes.length} bytes`);
+    }
+    return bytesToHex(bytes);
   }
-  return bytesToHex(bytes);
+
+  throw new Error(
+    `Unsupported CESR verkey: expected 'D'/'B' Ed25519 (44 chars) or '1AAJ'/'1AAI' P-256 ` +
+      `(48 chars), got '${cesr.slice(0, 6)}…' (length ${cesr.length})`,
+  );
 }
 
 /**
