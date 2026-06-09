@@ -1,0 +1,27 @@
+{
+  "assignee": "bordumbb@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-06-08T22:58:33.674305Z",
+  "created_at": "2026-06-08T22:06:21.064713Z",
+  "depends_on": [
+    "fn-1.4"
+  ],
+  "epic": "fn-1",
+  "evidence": {
+    "commits": [
+      "66856f2fae118ba6838aaa0b1154f68f8d7b4635"
+    ],
+    "prs": [],
+    "tests": [
+      "npm run build:pages",
+      "npx vitest run",
+      "npm run typecheck"
+    ]
+  },
+  "id": "fn-1.5",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-1.5.md",
+  "status": "done",
+  "title": "Live badge preview (sandboxed iframe) + GitHub Pages deploy for the builder/playground",
+  "updated_at": "2026-06-08T23:03:35.328595Z"
+}

@@ -9,8 +9,38 @@ A drop-in web component that verifies [Auths](https://github.com/auths-dev/auths
 
 **CDN (no build step):**
 
+Pin an exact version and add a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) (SRI) hash so the browser refuses a tampered bundle:
+
 ```html
-<script type="module" src="https://unpkg.com/@auths-dev/verify/dist/auths-verify.mjs"></script>
+<script
+  type="module"
+  src="https://unpkg.com/@auths-dev/verify@0.3.0/dist/auths-verify.mjs"
+  integrity="sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l"
+  crossorigin="anonymous"
+></script>
+```
+
+> **Pin a version with SRI — never `@latest`.** The `integrity` hash is
+> byte-exact, so it only validates against an immutable, version-pinned URL
+> (`@0.3.0`). A moving `@latest` URL changes bytes on every release and would
+> break the hash — and the badge — without warning. `crossorigin="anonymous"`
+> is required: without it the browser fetches the cross-origin script opaquely,
+> can't read it to verify, and the load fails. The hash above is for `@0.3.0`;
+> regenerate it for any other version with `npm run sri`, or copy it from the
+> file's page on [jsDelivr](https://www.jsdelivr.com/), which displays the SRI
+> hash for you. The WASM verifier is base64-inlined into this single `.mjs`, so
+> one `integrity` hash covers the entire runtime — there is no separate `.wasm`
+> fetch to protect.
+
+[jsDelivr](https://www.jsdelivr.com/) serves the same published file, so the same pin + `integrity` works there too:
+
+```html
+<script
+  type="module"
+  src="https://cdn.jsdelivr.net/npm/@auths-dev/verify@0.3.0/dist/auths-verify.mjs"
+  integrity="sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l"
+  crossorigin="anonymous"
+></script>
 ```
 
 **npm (for bundlers):**
@@ -33,15 +63,17 @@ Add the widget to any page and point it at a repository:
 
 That's it. The widget will:
 
-1. Call the GitHub API to read the repository's `refs/auths/` identity data
-2. Extract the public key from the identity's `did:key`
+1. Fetch the repository's latest GitHub Release and locate the `*.auths.json` attestation asset
+2. Read the verification key (Ed25519 or P-256) from the attestation
 3. Load the WASM verification engine
-4. Cryptographically verify the full attestation chain
+4. Cryptographically verify the attestation chain
 5. Display a badge showing the result (Verified, Invalid, Expired, etc.)
 
-**Prerequisite:** The repository owner must have set up an Auths identity with [`auths init`](https://github.com/auths-dev/auths). If the repo doesn't have Auths identity data, the widget will show an error.
+**Prerequisite:** The repository owner must have published an Auths attestation as a `*.auths.json` asset on a GitHub Release (Gitea repos expose it via `refs/auths/` instead). If the repo has no Auths attestation, the widget will show an error.
 
-**Supported forges:** GitHub and Gitea (including self-hosted). GitLab is not supported for auto-resolve because its API does not expose custom Git refs — use manual mode instead.
+**Supported forges:** GitHub (via Release assets) and Gitea (via Git refs, including self-hosted). GitLab is not supported for auto-resolve because its API does not expose custom Git refs — use manual mode instead.
+
+> **Build your embed in the browser:** the [Embed Builder](https://auths-dev.github.io/auths-verify-widget/) lets you paste a repo URL, preview the live badge, and copy a version-pinned, SRI-protected snippet.
 
 ## Display Modes
 
@@ -113,7 +145,7 @@ Or for a full chain:
 |---|---|---|
 | `attestation` | JSON string | Single attestation to verify |
 | `attestations` | JSON array string | Chain of attestations to verify |
-| `public-key` | hex string | Root/issuer Ed25519 public key (64 hex chars) |
+| `public-key` | hex string | Root/issuer public key — Ed25519 (64 hex chars) or P-256 (66 hex chars, compressed) |
 
 ## JavaScript API
 
@@ -160,13 +192,14 @@ Available properties: `--auths-{state}-bg`, `--auths-{state}-fg`, `--auths-{stat
 
 When you set `repo="https://github.com/user/repo"`:
 
-1. The widget parses the URL and detects the forge (GitHub, Gitea, or GitLab)
-2. It calls the forge's REST API to list Git refs under `refs/auths/`
-3. It reads `identity.json` from `refs/auths/identity` to get the controller DID
-4. It extracts the Ed25519 public key from the `did:key:z...` identifier (pure TypeScript, no WASM needed)
-5. It reads `attestation.json` from each device ref under `refs/auths/devices/nodes/`
-6. It loads the WASM verification engine and cryptographically verifies the attestation chain
-7. It renders the result as a badge
+1. The widget parses the URL and detects the forge (GitHub, Gitea, or GitLab).
+2. It resolves the attestation data — the mechanism depends on the forge:
+   - **GitHub:** fetches the repository's latest Release (`/repos/{owner}/{repo}/releases/latest`), finds the `*.auths.json` asset, and downloads it (via the Contents API, falling back to the Release asset API).
+   - **Gitea:** reads the auths data from Git refs under `refs/auths/` via the Gitea REST API.
+   - **GitLab:** not supported for auto-resolve (its REST API does not expose the required data) — use manual mode.
+3. It derives the verification key (Ed25519 or P-256): for GitHub, the device public key carried in the attestation; for Gitea, extracted from the controller's `did:key`/CESR identifier (pure TypeScript, no WASM needed).
+4. It loads the WASM verification engine and cryptographically verifies the attestation chain.
+5. It renders the result as a badge.
 
 The resolver layer uses dynamic imports — if you only use manual `attestation`/`public-key` attributes, the resolver code is never loaded (zero bundle size impact).
 
@@ -222,8 +255,10 @@ npm run build
 ```
 
 Outputs:
-- `dist/auths-verify.mjs` — single file with WASM base64-inlined
-- `dist/slim/auths-verify.mjs` — smaller JS, loads `.wasm` separately
+- `dist/auths-verify.mjs` — single self-contained file with the WASM base64-inlined. Recommended for CDN + SRI: one file, one `integrity` hash covers the whole runtime.
+- `dist/slim/auths-verify.mjs` — the `./slim` export. Note: it currently also inlines the WASM (via `vite-plugin-wasm`), so it is the same size as the full bundle and shares the same single-hash SRI story; there is no separate `.wasm` to fetch today.
+
+Generate the SRI hash for the built bundle(s) with `npm run sri`.
 
 ## License
 

@@ -73,4 +73,79 @@ describe('detectForge', () => {
     expect(config!.owner).toBe('auths-dev');
     expect(config!.repo).toBe('auths');
   });
+
+  it('should strip ?query and #hash from full URLs', () => {
+    const config = detectForge('https://github.com/auths-dev/auths?tab=readme#top');
+    expect(config).not.toBeNull();
+    expect(config!.owner).toBe('auths-dev');
+    expect(config!.repo).toBe('auths');
+  });
+
+  it('should resolve owner/repo shorthand (assumes GitHub)', () => {
+    const config = detectForge('auths-dev/auths');
+    expect(config).toEqual({
+      type: 'github',
+      baseUrl: 'https://api.github.com',
+      owner: 'auths-dev',
+      repo: 'auths',
+    });
+  });
+
+  it('should strip .git from owner/repo shorthand', () => {
+    const config = detectForge('auths-dev/auths.git');
+    expect(config).not.toBeNull();
+    expect(config!.type).toBe('github');
+    expect(config!.repo).toBe('auths');
+  });
+
+  it('should keep a dot inside a shorthand repo name', () => {
+    const config = detectForge('auths-dev/my.repo');
+    expect(config).not.toBeNull();
+    expect(config!.owner).toBe('auths-dev');
+    expect(config!.repo).toBe('my.repo');
+  });
+
+  it('should accept a protocol-less GitHub host', () => {
+    const config = detectForge('github.com/auths-dev/auths');
+    expect(config).toEqual({
+      type: 'github',
+      baseUrl: 'https://api.github.com',
+      owner: 'auths-dev',
+      repo: 'auths',
+    });
+  });
+
+  it('should accept a protocol-less self-hosted (Gitea) host', () => {
+    const config = detectForge('git.example.com/user/repo');
+    expect(config).not.toBeNull();
+    expect(config!.type).toBe('gitea');
+    expect(config!.baseUrl).toBe('https://git.example.com');
+    expect(config!.repo).toBe('repo');
+  });
+
+  it('returns null for Gitea shorthand without a host (needs a full URL)', () => {
+    // Documented limitation: Gitea/GitLab cannot be resolved from "owner/repo".
+    expect(detectForge('user/repo', 'gitea')).toBeNull();
+  });
+
+  it('normalizes every GitHub form to the same config', () => {
+    const expected = {
+      type: 'github',
+      baseUrl: 'https://api.github.com',
+      owner: 'auths-dev',
+      repo: 'auths',
+    };
+    for (const input of [
+      'https://github.com/auths-dev/auths',
+      'https://github.com/auths-dev/auths.git',
+      'https://github.com/auths-dev/auths/',
+      'https://github.com/auths-dev/auths/tree/main',
+      'https://github.com/auths-dev/auths?x=1#y',
+      'github.com/auths-dev/auths',
+      'auths-dev/auths',
+      'auths-dev/auths.git',
+    ]) {
+      expect(detectForge(input), `input: ${input}`).toEqual(expected);
+    }
+  });
 });

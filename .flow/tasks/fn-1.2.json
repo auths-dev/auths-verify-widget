@@ -1,0 +1,26 @@
+{
+  "assignee": "bordumbb@gmail.com",
+  "claim_note": "",
+  "claimed_at": "2026-06-08T22:44:23.851677Z",
+  "created_at": "2026-06-08T22:06:20.465209Z",
+  "depends_on": [
+    "fn-1.1"
+  ],
+  "epic": "fn-1",
+  "evidence": {
+    "commits": [
+      "8ff53e3a49572455fe5861986ce438d7932399a5"
+    ],
+    "prs": [],
+    "tests": [
+      "npm run typecheck",
+      "npx vitest run"
+    ]
+  },
+  "id": "fn-1.2",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-1.2.md",
+  "status": "done",
+  "title": "Harden detect.ts URL normalization; standardize on full-URL repo= form; add tests; align snippets",
+  "updated_at": "2026-06-08T22:47:03.651268Z"
+}

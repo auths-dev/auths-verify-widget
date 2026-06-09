@@ -1,6 +1,6 @@
 {
   "name": "@auths-dev/verify",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Drop-in <auths-verify> web component for decentralized commit verification",
   "type": "module",
   "main": "dist/auths-verify.mjs",
@@ -23,8 +23,10 @@
     "build": "npm run build:full && npm run build:slim",
     "build:full": "INLINE_WASM=true vite build",
     "build:slim": "vite build --mode slim",
+    "build:pages": "vite build --config vite.pages.config.ts && cp dist-pages/embed-builder.html dist-pages/index.html",
     "build:wasm": "cd ../auths/crates/auths-verifier && wasm-pack build --target bundler --no-default-features --features wasm && rm -rf ../../../auths-verify-widget/wasm && mv pkg ../../../auths-verify-widget/wasm",
     "typecheck": "tsc --noEmit",
+    "sri": "node scripts/sri.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest",

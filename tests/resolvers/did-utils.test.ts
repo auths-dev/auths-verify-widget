@@ -24,6 +24,22 @@ describe('didKeyToPublicKeyHex', () => {
     expect(() => didKeyToPublicKeyHex('not-a-did')).toThrow('Expected did:key:z');
   });
 
+  it('extracts P-256 compressed key from did:key:zDna... (33 bytes)', () => {
+    // Vector: P-256 compressed key 0x02 || 0x00..0x1f, multicodec 0x80 0x24, base58btc.
+    const didKey = 'did:key:zDnaeQRywL8RCtEJDKtCyC1VdhMZrFLqPnRJ6udCLK3MvA4ut';
+    const expected = '02000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+    const hex = didKeyToPublicKeyHex(didKey);
+    expect(hex).toBe(expected);
+    expect(hex).toHaveLength(66); // 33 bytes → 66 hex chars (curve resolved by length downstream)
+  });
+
+  it('rejects an unsupported multicodec', () => {
+    // Deterministic vector: raw multicodec [0x12,0x00] (neither Ed25519 nor P-256) + 32 bytes.
+    expect(() => didKeyToPublicKeyHex('did:key:zQbrzXjvR2ew9AFuZgHdj4f7hbsDDgsLcwSbMUhB4fDRbZQ')).toThrow(
+      'Unsupported did:key multicodec',
+    );
+  });
+
   it('should produce consistent results for same input', () => {
     const did = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp';
     const hex1 = didKeyToPublicKeyHex(did);
@@ -49,12 +65,25 @@ describe('cesrToPublicKeyHex', () => {
     expect(cesrToPublicKeyHex(cesr)).toBe(expected);
   });
 
-  it('rejects non-D prefix', () => {
-    expect(() => cesrToPublicKeyHex('X' + 'A'.repeat(43))).toThrow('Expected 44-char CESR');
+  it('decodes a P-256 CESR verkey (1AAI, 48 chars → 33 bytes)', () => {
+    // Vector: 1AAI || base64url-nopad(0x02 || 0x00..0x1f). Mirrors Rust KeriPublicKey::parse.
+    const cesr = '1AAIAgABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f';
+    const expected = '02000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+    expect(cesrToPublicKeyHex(cesr)).toBe(expected);
+  });
+
+  it('accepts the transferable P-256 code 1AAJ', () => {
+    const cesr = '1AAJAgABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f';
+    const expected = '02000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+    expect(cesrToPublicKeyHex(cesr)).toBe(expected);
+  });
+
+  it('rejects an unsupported prefix', () => {
+    expect(() => cesrToPublicKeyHex('X' + 'A'.repeat(43))).toThrow('Unsupported CESR verkey');
   });
 
   it('rejects wrong length', () => {
-    expect(() => cesrToPublicKeyHex('DAAA')).toThrow('Expected 44-char CESR');
+    expect(() => cesrToPublicKeyHex('DAAA')).toThrow('Unsupported CESR verkey');
   });
 });
 
