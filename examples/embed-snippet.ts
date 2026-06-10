@@ -9,8 +9,8 @@ import { detectForge } from '../src/resolvers/detect';
 import type { ForgeConfig } from '../src/resolvers/types';
 
 // Keep VERSION + SRI in sync with the README CDN snippet and `npm run sri`.
-export const VERSION = '0.3.0';
-export const SRI = 'sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l';
+export const VERSION = '0.4.0';
+export const SRI = 'sha384-C6a5GCsPgw/o9tmtnaUXZ0qJgY/q8LdNxvuP/10EwOK39ZdiAcYz6CP8lT6m1V5R';
 
 export const cdnUrl = (version = VERSION): string =>
   `https://unpkg.com/@auths-dev/verify@${version}/dist/auths-verify.mjs`;

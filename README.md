@@ -14,18 +14,18 @@ Pin an exact version and add a [Subresource Integrity](https://developer.mozilla
 ```html
 <script
   type="module"
-  src="https://unpkg.com/@auths-dev/verify@0.3.0/dist/auths-verify.mjs"
-  integrity="sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l"
+  src="https://unpkg.com/@auths-dev/verify@0.4.0/dist/auths-verify.mjs"
+  integrity="sha384-C6a5GCsPgw/o9tmtnaUXZ0qJgY/q8LdNxvuP/10EwOK39ZdiAcYz6CP8lT6m1V5R"
   crossorigin="anonymous"
 ></script>
 ```
 
 > **Pin a version with SRI — never `@latest`.** The `integrity` hash is
 > byte-exact, so it only validates against an immutable, version-pinned URL
-> (`@0.3.0`). A moving `@latest` URL changes bytes on every release and would
+> (`@0.4.0`). A moving `@latest` URL changes bytes on every release and would
 > break the hash — and the badge — without warning. `crossorigin="anonymous"`
 > is required: without it the browser fetches the cross-origin script opaquely,
-> can't read it to verify, and the load fails. The hash above is for `@0.3.0`;
+> can't read it to verify, and the load fails. The hash above is for `@0.4.0`;
 > regenerate it for any other version with `npm run sri`, or copy it from the
 > file's page on [jsDelivr](https://www.jsdelivr.com/), which displays the SRI
 > hash for you. The WASM verifier is base64-inlined into this single `.mjs`, so
@@ -37,8 +37,8 @@ Pin an exact version and add a [Subresource Integrity](https://developer.mozilla
 ```html
 <script
   type="module"
-  src="https://cdn.jsdelivr.net/npm/@auths-dev/verify@0.3.0/dist/auths-verify.mjs"
-  integrity="sha384-M1UJQ02k36YqkLbXIPrV98mCZKA7pm3J2TX5PNGwi+ZJwjcJC2CoKN8dCJZpe0+l"
+  src="https://cdn.jsdelivr.net/npm/@auths-dev/verify@0.4.0/dist/auths-verify.mjs"
+  integrity="sha384-C6a5GCsPgw/o9tmtnaUXZ0qJgY/q8LdNxvuP/10EwOK39ZdiAcYz6CP8lT6m1V5R"
   crossorigin="anonymous"
 ></script>
 ```
