@@ -1,0 +1,61 @@
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Publish target"
+        required: true
+        type: choice
+        options:
+          - npm
+          - dry-run
+        default: dry-run
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: auths-verify-widget
+
+      # build:wasm compiles ../auths/crates/auths-verifier — same layout as CI
+      - uses: actions/checkout@v4
+        with:
+          repository: auths-dev/auths
+          path: auths
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93"
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: auths-verify-widget/package-lock.json
+
+      - name: Install dependencies
+        working-directory: auths-verify-widget
+        run: npm install
+
+      - name: Build + test + publish
+        working-directory: auths-verify-widget
+        run: |
+          if [ "${{ github.event.inputs.target }}" = "dry-run" ]; then
+            npm run build:wasm && npm test && npm run build && npm pack
+          else
+            npm publish --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
