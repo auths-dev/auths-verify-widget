@@ -33,18 +33,30 @@ function inlineWasmPlugin(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const isSlim = mode === 'slim';
+  const isCore = mode === 'core';
 
   return {
-    plugins: [wasm(), topLevelAwait(), inlineWasmPlugin()],
+    // The core entry targets modern runtimes (Node 20+, Deno, Bun, edge) that
+    // support native top-level await, so it skips the top-level-await transform
+    // — that transform gates exports behind a `__tla` promise, which would break
+    // `import { verifyAttestationJson } from '.../core'`. The browser builds keep
+    // the transform for broad compatibility.
+    plugins: isCore
+      ? [wasm(), inlineWasmPlugin()]
+      : [wasm(), topLevelAwait(), inlineWasmPlugin()],
     build: {
+      // Native top-level await for the core build (WASM instantiates at load).
+      ...(isCore ? { target: 'esnext' } : {}),
       lib: {
-        entry: resolve(__dirname, 'src/auths-verify.ts'),
-        name: 'AuthsVerify',
+        // The DOM-free core entry vs. the <auths-verify> component entry.
+        entry: resolve(__dirname, isCore ? 'src/core.ts' : 'src/auths-verify.ts'),
+        name: isCore ? 'AuthsVerifyCore' : 'AuthsVerify',
         formats: ['es'],
-        fileName: () => isSlim ? 'slim/auths-verify.mjs' : 'auths-verify.mjs',
+        fileName: () => isCore ? 'core.mjs' : isSlim ? 'slim/auths-verify.mjs' : 'auths-verify.mjs',
       },
       outDir: 'dist',
-      emptyOutDir: !isSlim,
+      // Only the full build clears dist; core/slim append to it.
+      emptyOutDir: !isSlim && !isCore,
       sourcemap: true,
       rollupOptions: {
         output: {

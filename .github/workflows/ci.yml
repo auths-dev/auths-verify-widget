@@ -55,11 +55,16 @@ jobs:
       - name: Run tests
         run: npm run test
 
-      - name: Build (full + slim)
+      - name: Build (full + core + slim + types)
         run: npm run build
 
       - name: Verify output exists
         run: |
           test -f dist/auths-verify.mjs || (echo "Missing dist/auths-verify.mjs" && exit 1)
-          echo "Bundle size:"
-          ls -lh dist/auths-verify.mjs
+          test -f dist/core.mjs || (echo "Missing dist/core.mjs" && exit 1)
+          test -f dist/types/core.d.ts || (echo "Missing dist/types/core.d.ts" && exit 1)
+          echo "Bundle sizes:"
+          ls -lh dist/auths-verify.mjs dist/core.mjs
+
+      - name: Node smoke test (headless core)
+        run: node scripts/smoke-core.mjs

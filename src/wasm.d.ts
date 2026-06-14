@@ -8,4 +8,11 @@ declare module 'auths-verifier-wasm' {
   export default function init(input?: BufferSource | string): Promise<void>;
   export function verifyAttestationWithResult(attestationJson: string, issuerPkHex: string): string;
   export function verifyChainJson(attestationsJsonArray: string, rootPkHex: string): string;
+  export function verifyAttestationJson(attestationJson: string, issuerPkHex: string): Promise<void>;
+  export function verifyArtifactSignature(
+    fileHashHex: string,
+    signatureHex: string,
+    publicKeyHex: string,
+    curve?: string | null,
+  ): Promise<boolean>;
 }

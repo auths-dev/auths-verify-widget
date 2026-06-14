@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-14
+
+### Added
+
+- **core:** New DOM-free `@auths-dev/verify/core` entry point that exposes the WASM verifier functions directly — `verifyAttestation`, `verifyChain`, `verifyAttestationJson`, `verifyChainJson`, `verifySignature` (alias of `verifyArtifactSignature`), and `init`/`ensureInit`. Works headless in Node 20+, Deno, Bun, SSR/RSC, edge functions, CI, and tests with **no DOM shim**. It runs the same compiled WASM as the `<auths-verify>` component and returns the same verdict (not the Rust CLI's extra supply-chain commit-trust check). Purely additive — the component remains the default browser entry; `.` and `./slim` are unchanged.
+- **build:** `build:types` step now emits TypeScript declarations (`dist/types/*.d.ts`) for every entry — previously the package shipped without emitted `.d.ts` files, so the `.` and `./slim` `types` conditions resolved to nothing.
+- **tests:** Standalone Node smoke test (`scripts/smoke-core.mjs`, wired into CI) that imports the built `dist/core.mjs` with no DOM shim and verifies a known-good signed attestation, rejects a tampered one, and rejects malformed JSON cleanly. First test to exercise the real compiled WASM end-to-end.
+
 ## [0.3.0] - 2026-06-08
 
 ### Changed

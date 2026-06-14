@@ -17,6 +17,13 @@ interface WasmModule {
   default?: (input?: BufferSource | string) => Promise<void>;
   verifyAttestationWithResult(attestationJson: string, issuerPkHex: string): string | Promise<string>;
   verifyChainJson(attestationsJsonArray: string, rootPkHex: string): string | Promise<string>;
+  verifyAttestationJson(attestationJson: string, issuerPkHex: string): void | Promise<void>;
+  verifyArtifactSignature(
+    fileHashHex: string,
+    signatureHex: string,
+    publicKeyHex: string,
+    curve?: string | null,
+  ): boolean | Promise<boolean>;
 }
 
 function isInlined(): boolean {
@@ -41,6 +48,17 @@ async function loadWasm(wasmUrl?: string): Promise<void> {
   // If no .default export, WASM was auto-initialized by vite-plugin-wasm (ESM direct import)
 
   wasmModule = wasm;
+}
+
+/**
+ * Inject an already-initialized WASM module, bypassing the dynamic-import
+ * loader. Used by the DOM-free `core` entry, which imports the WASM glue
+ * statically so it is instantiated as part of module load (the bundler's
+ * inlined-dynamic-import path is unreliable headless). After this, `ensureInit`
+ * resolves immediately and the lazy `loadWasm` path is never taken.
+ */
+export function setWasmModule(mod: WasmModule): void {
+  wasmModule = mod;
 }
 
 /**
@@ -102,4 +120,50 @@ export async function verifyChain(
       warnings: [],
     };
   }
+}
+
+// --- Raw WASM passthroughs ---------------------------------------------------
+// Thin wrappers exposing the wasm-bindgen functions directly, for headless
+// consumers that want the strict (throwing) verdict or the raw JSON report.
+// Each ensures the WASM is initialized first. These produce the exact same
+// verdict as the high-level helpers above — they are the layer those helpers
+// (and therefore the <auths-verify> widget) are built on.
+
+/**
+ * Strict single-attestation check. Resolves on a Valid verdict; throws with
+ * the status/error message (e.g. "[AUTHS-E2003] expired") otherwise.
+ */
+export async function verifyAttestationJson(
+  attestationJson: string,
+  issuerKeyHex: string,
+): Promise<void> {
+  await ensureInit();
+  await wasmModule!.verifyAttestationJson(attestationJson, issuerKeyHex);
+}
+
+/**
+ * Verify a chain and return the raw `VerificationReport` JSON string (as
+ * produced by the WASM core, without parsing). Never throws — the verdict is
+ * carried in the report's `status`.
+ */
+export async function verifyChainJson(
+  attestationsJsonArray: string,
+  rootKeyHex: string,
+): Promise<string> {
+  await ensureInit();
+  return wasmModule!.verifyChainJson(attestationsJsonArray, rootKeyHex);
+}
+
+/**
+ * Verify a detached signature over a file/artifact hash (NOT a generic
+ * message-signature check). `curve` defaults to ed25519; pass "p256" for P-256.
+ */
+export async function verifyArtifactSignature(
+  fileHashHex: string,
+  signatureHex: string,
+  publicKeyHex: string,
+  curve?: string | null,
+): Promise<boolean> {
+  await ensureInit();
+  return wasmModule!.verifyArtifactSignature(fileHashHex, signatureHex, publicKeyHex, curve);
 }

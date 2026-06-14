@@ -172,6 +172,62 @@ el.addEventListener('auths-error', (e) => {
 });
 ```
 
+## Headless verification — `@auths-dev/verify/core`
+
+The `<auths-verify>` component needs a browser DOM. For everything else — Node,
+Deno, Bun, SSR/RSC, edge functions, CI/supply-chain gates, and tests — import
+the DOM-free **`@auths-dev/verify/core`** entry, which exposes the verifier
+functions directly. It loads with no `HTMLElement`/`customElements`/`document`
+references, so it works headless with **no DOM shim**.
+
+It runs the *exact same* compiled WASM verifier the widget uses and returns the
+*same verdict* — so a server pre-check, a CI gate, and the in-browser badge all
+agree. (It does not apply the Rust CLI's additional supply-chain commit-trust
+check; the verdict matches the widget's, not the CLI's.) The WASM is inlined, so
+there is no separate `.wasm` to fetch and no init step for the caller.
+
+```js
+// Node 20+ (ESM), Deno, Bun, edge, SSR — no DOM required.
+import { verifyAttestation } from '@auths-dev/verify/core';
+
+const { valid, error } = await verifyAttestation(attestationJson, issuerKeyHex);
+if (valid) {
+  console.log('Verified ✓');
+} else {
+  console.error('Rejected:', error);
+}
+```
+
+**Strict (throwing) form** — resolves on a `Valid` verdict, throws the status
+otherwise:
+
+```js
+import { verifyAttestationJson } from '@auths-dev/verify/core';
+
+try {
+  await verifyAttestationJson(attestationJson, issuerKeyHex); // throws if not Valid
+  console.log('Verified ✓');
+} catch (err) {
+  console.error('Rejected:', err.message);
+}
+```
+
+### API
+
+| Export | Signature | Returns |
+| --- | --- | --- |
+| `verifyAttestation` | `(attestationJson, issuerKeyHex)` | `Promise<{ valid, error? }>` — the widget's verdict |
+| `verifyChain` | `(attestations[], rootKeyHex)` | `Promise<VerificationReport>` |
+| `verifyAttestationJson` | `(attestationJson, issuerKeyHex)` | `Promise<void>` — resolves on Valid, throws otherwise |
+| `verifyChainJson` | `(attestationsJsonArray, rootKeyHex)` | `Promise<string>` — raw `VerificationReport` JSON |
+| `verifySignature` | `(fileHashHex, signatureHex, publicKeyHex, curve?)` | `Promise<boolean>` |
+| `init` / `ensureInit` | `()` | `Promise<void>` — optional; verify calls initialize on first use |
+
+> **`verifySignature` is an alias of `verifyArtifactSignature`** — it verifies a
+> *detached signature over a file/artifact hash*, not an arbitrary message. Pass
+> `curve` as `"ed25519"` (default) or `"p256"`. The hash and signature are hex
+> strings.
+
 ## Theming
 
 All colors are overridable via CSS custom properties:
